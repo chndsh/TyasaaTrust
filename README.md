@@ -13,17 +13,17 @@ If a file is missing, do not create it in the wrong place.
 alt-trust-layer/                   ← root of the repo
 │
 ├── docker-compose.yml             ← starts ALL services with one command
+├── requirements.txt               ← all Python packages (backend + frontend)
 ├── .env                           ← your secrets (never commit this)
 ├── .env.example                   ← template — commit this, not .env
 ├── .gitignore
 │
 ├── backend/                       ← FastAPI + Celery
-│   ├── requirements.txt           ← all Python packages for the backend
 │   ├── main.py                    ← FastAPI app entry point
 │   ├── tasks.py                   ← Celery task definitions
+│   ├── models.py                  ← SQLAlchemy table models
 │   ├── db/
 │   │   └── init.sql               ← schema, runs automatically on first boot
-│   ├── models.py                  ← SQLAlchemy table models
 │   ├── modules/
 │   │   ├── social_graph.py        ← Person A owns this
 │   │   ├── psychometric.py        ← Person B owns this
@@ -39,7 +39,6 @@ alt-trust-layer/                   ← root of the repo
 │       └── mock_generator.py      ← Person C owns this
 │
 └── frontend/                      ← Streamlit
-    ├── requirements.txt           ← Python packages for the frontend
     ├── app.py                     ← main page (landing / home)
     └── pages/
         ├── 2_graph_explorer.py    ← Person A owns this
@@ -49,6 +48,10 @@ alt-trust-layer/                   ← root of the repo
 
 > The `pages/` folder uses number prefixes (`2_`, `3_`, `4_`) because
 > Streamlit uses them to set the order in the sidebar automatically.
+
+> **Note:** `requirements.txt` is now consolidated at the root level and includes
+> all dependencies for both backend and frontend. The individual `requirements.txt` files
+> in `backend/` and `frontend/` folders are no longer used.
 
 ---
 
