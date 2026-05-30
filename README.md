@@ -12,7 +12,7 @@ If a file is missing, do not create it in the wrong place.
 ```
 alt-trust-layer/                   ← root of the repo
 │
-├── docker-compose.yml             ← starts ALL services with one command
+├── docker-compose.yml             ← starts databases/servers only
 ├── requirements.txt               ← all Python packages (backend + frontend)
 ├── .env                           ← your secrets (never commit this)
 ├── .env.example                   ← template — commit this, not .env
@@ -61,11 +61,11 @@ When `docker compose up` is running, these are available on your machine:
 
 | Service | URL | What it is |
 |---|---|---|
-| Streamlit UI | http://localhost:8501 | The merchant-facing app |
-| FastAPI docs | http://localhost:8000/docs | Interactive API explorer |
-| FastAPI raw | http://localhost:8000 | The backend API |
-| PostgreSQL | localhost:5432 | Database (use any DB client) |
-| Redis | localhost:6379 | Task queue (no UI needed) |
+| Streamlit UI | http://localhost:8501 | Run locally via Streamlit |
+| FastAPI docs | http://localhost:8000/docs | Run locally via Uvicorn |
+| FastAPI raw | http://localhost:8000 | Run locally via Uvicorn |
+| PostgreSQL | localhost:5432 | Database (Docker Compose) |
+| Redis | localhost:6379 | Task queue (Docker Compose) |
 
 ---
 
@@ -111,21 +111,27 @@ GEMINI_API_KEY=paste_your_actual_key_here
 
 Everything else in `.env` can stay as the default values.
 
-### 4. Start the project
+### 4. Start dependencies + run services locally
 
 ```bash
-docker compose up
+# Create a virtualenv (once)
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+
+# Start database + redis
+docker compose up -d
+
+# Terminal 1: backend
+cd backend
+uvicorn main:app --reload --port 8000
+
+# Terminal 2: frontend
+cd frontend
+streamlit run app.py --server.port 8501
 ```
 
-The first run takes 3–5 minutes — it is downloading the Python image and
-installing all packages. Every run after that is faster.
-
-You will know it is ready when you see this in the terminal:
-
-```
-atl_backend   | INFO:     Application startup complete.
-atl_frontend  | You can now view your Streamlit app in your browser.
-```
+The first run after installing dependencies takes a bit longer; after that it is instant.
 
 ---
 
@@ -135,32 +141,41 @@ atl_frontend  | You can now view your Streamlit app in your browser.
 # 1. Pull any changes your teammates pushed overnight
 git pull origin main
 
-# 2. Start all services in the background
+# 2. Start database + redis
 docker compose up -d
 
-# 3. Watch the logs to make sure nothing is broken
-docker compose logs -f backend
-# Press Ctrl+C to stop watching logs — services keep running in background
+# 3. Run backend + frontend locally (two terminals)
+cd backend
+uvicorn main:app --reload --port 8000
+
+# In another terminal
+cd frontend
+streamlit run app.py --server.port 8501
 ```
 
 ---
 
 ## Making changes to code
 
-The `backend/` and `frontend/` folders are mounted as live volumes inside Docker.
-This means **you do not need to restart Docker when you save a file** — changes
-appear immediately.
+The backend and frontend run locally with hot-reload enabled:
 
 - FastAPI reloads automatically on save (the `--reload` flag is set).
-- Streamlit reloads automatically on save (the `--server.runOnSave` flag is set).
+- Streamlit reloads automatically on save.
 
-The only time you need to restart is when you change `requirements.txt`
-(adding a new package). In that case:
+If you change `requirements.txt`, reinstall dependencies and restart the
+backend/frontend processes:
 
 ```bash
-docker compose down
-docker compose up
+pip install -r requirements.txt
 ```
+
+---
+
+## Independent development stubs
+
+Each module ships with placeholder outputs so the API and UI can run end-to-end
+while each person builds their own portion. Replace the stubbed logic in your
+module and router as your feature matures.
 
 ---
 
@@ -227,29 +242,21 @@ You do not need to switch branches. This updates your branch with their merged c
 ### Docker
 
 ```bash
-# Start everything (foreground, see all logs)
+# Start database + redis (foreground, see logs)
 docker compose up
 
-# Start everything (background, silent)
+# Start database + redis (background)
 docker compose up -d
 
-# Stop everything
+# Stop database + redis
 docker compose down
 
 # Stop and DELETE the database (fresh start)
 docker compose down -v
 
-# Rebuild after changing requirements.txt
-docker compose up --build
-
 # See logs for one service
-docker compose logs -f backend
-docker compose logs -f frontend
-docker compose logs -f worker
 docker compose logs -f postgres
-
-# Open a shell inside the backend container
-docker compose exec backend bash
+docker compose logs -f redis
 
 # Open the PostgreSQL command line
 docker compose exec postgres psql -U atl_user -d alt_trust
@@ -274,14 +281,14 @@ git log --oneline
 git pull origin main
 ```
 
-### Running scripts inside Docker
+### Running scripts locally
 
 ```bash
 # Seed the database with mock data (Person C sets this up)
-docker compose exec backend python data/mock_generator.py
+python backend/data/mock_generator.py
 
-# Run a quick API test from inside the container
-docker compose exec backend python -c "
+# Run a quick API test
+python -c "
 import httpx
 r = httpx.get('http://localhost:8000/health')
 print(r.json())
@@ -292,54 +299,21 @@ print(r.json())
 
 ## How `main.py` works — the router registration pattern
 
-`backend/main.py` is the FastAPI entry point. Each person's router is commented
-out by default. You uncomment your own line when your router is ready.
-
-```python
-# main.py
-
-from fastapi import FastAPI
-
-app = FastAPI(title="Alternative Trust Layer API")
-
-@app.get("/health")
-async def health():
-    return {"status": "ok"}
-
-# Uncomment your line when your router is working:
-# from routers.graph   import router as graph_router    ← Person A
-# from routers.psych   import router as psych_router    ← Person B
-# from routers.ingest  import router as ingest_router   ← Person C
-# from routers.scoring import router as scoring_router  ← Person C
-
-# app.include_router(graph_router,   prefix="/graph",   tags=["graph"])
-# app.include_router(psych_router,   prefix="/psych",   tags=["psychometric"])
-# app.include_router(ingest_router,  prefix="/ingest",  tags=["ingest"])
-# app.include_router(scoring_router, prefix="/scores",  tags=["scores"])
-```
-
-When you uncomment your lines and save, FastAPI restarts and your endpoints
-appear immediately at `http://localhost:8000/docs`.
+`backend/main.py` is the FastAPI entry point. All routers are registered by
+default so each person can develop and test independently with stubbed data.
+Update your own router/module as you build out your feature.
 
 ---
 
 ## Connecting frontend to backend
 
-Inside Docker, the frontend container talks to the backend container using
-the service name `backend`, not `localhost`. Always use:
+The frontend now runs locally and talks to the local backend:
 
 ```python
-API_URL = "http://backend:8000"   # correct — works inside Docker
-API_URL = "http://localhost:8000" # wrong — only works outside Docker
+API_URL = "http://localhost:8000"
 ```
 
-This is already set via the `API_URL` environment variable in `docker-compose.yml`.
-In Streamlit, read it like this:
-
-```python
-import os
-API = os.getenv("API_URL", "http://backend:8000")
-```
+You can override this via the `API_URL` environment variable (see `.env.example`).
 
 ---
 
@@ -383,13 +357,13 @@ docker compose down -v
 docker compose up -d
 
 # 3. Seed mock data
-docker compose exec backend python data/mock_generator.py
+python backend/data/mock_generator.py
 
 # 4. Check all services are healthy
 docker compose ps
 
 # 5. Hit the full scoring endpoint
-docker compose exec backend python -c "
+python -c "
 import httpx
 r = httpx.get('http://localhost:8000/scores/00000000-0000-0000-0000-000000000001')
 import json; print(json.dumps(r.json(), indent=2))

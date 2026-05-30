@@ -4,8 +4,8 @@ import os
 # Rename your variable instance to matches Celery's default inspection pattern
 celery = Celery(
     'tasks',
-    broker=os.getenv("REDIS_URL", "redis://redis:6379/0"),
-    backend=os.getenv("REDIS_URL", "redis://redis:6379/0")
+    broker=os.getenv("REDIS_URL", "redis://localhost:6379/0"),
+    backend=os.getenv("REDIS_URL", "redis://localhost:6379/0")
 )
 
 @celery.task
