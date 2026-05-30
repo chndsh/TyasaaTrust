@@ -1,14 +1,15 @@
-from fastapi import APIRouter
-from pydantic import BaseModel, ConfigDict, Field
+try:
+    from fastapi import APIRouter
+except Exception:  # pragma: no cover - optional dependency
+    from .._stubs import APIRouter
+
+try:
+    from pydantic import BaseModel, ConfigDict, Field
+except Exception:  # pragma: no cover - optional dependency
+    from .._stubs import BaseModel, Field, ConfigDict
 from datetime import date
 from typing import Any
 
-from ..behavioral_proxies.utils.io import get_database_url
-from ..behavioral_proxies.utils.persistence import (
-    build_database_engine,
-    write_behavioral_score,
-    write_behavioral_scores,
-)
 from ..modules.behavioral import get_behavioral_score
 from ..modules.fusion import combine_scores
 from ..modules.psychometric import get_psychometric_score
@@ -16,6 +17,9 @@ from ..modules.social_graph import get_social_graph_score
 
 router = APIRouter()
 
+class ScoringPayload(BaseModel):
+    session_id: str
+    answers: dict[str, str]
 
 class BehavioralScorePayload(BaseModel):
     model_config = ConfigDict(protected_namespaces=())
@@ -46,12 +50,19 @@ def score_merchant(merchant_id: str):
 
 @router.post("/behavioral", status_code=201, response_model=BehavioralScoreWriteResponse)
 def write_behavioral_score_endpoint(payload: BehavioralScorePayload):
+    # Lazy-import DB helpers to avoid import-time errors when SQLAlchemy/pandas
+    # or other DB deps are not installed in the environment.
     try:
-        engine = build_database_engine(get_database_url())
+        from ..behavioral_proxies.utils.io import get_database_url
+        from ..behavioral_proxies.utils.persistence import (
+            build_database_engine,
+            write_behavioral_score,
+        )
     except Exception:
         return BehavioralScoreWriteResponse(status="error", inserted=0)
 
     try:
+        engine = build_database_engine(get_database_url())
         inserted = write_behavioral_score(engine, payload.model_dump())
     except Exception:
         return BehavioralScoreWriteResponse(status="error", inserted=0)
@@ -66,11 +77,16 @@ def write_behavioral_score_endpoint(payload: BehavioralScorePayload):
 )
 def write_behavioral_scores_endpoint(payload: BehavioralScoreBatchPayload):
     try:
-        engine = build_database_engine(get_database_url())
+        from ..behavioral_proxies.utils.io import get_database_url
+        from ..behavioral_proxies.utils.persistence import (
+            build_database_engine,
+            write_behavioral_scores,
+        )
     except Exception:
         return BehavioralScoreWriteResponse(status="error", inserted=0)
 
     try:
+        engine = build_database_engine(get_database_url())
         inserted = write_behavioral_scores(
             engine,
             [item.model_dump() for item in payload.scores],

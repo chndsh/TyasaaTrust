@@ -4,8 +4,13 @@ except Exception:  # pragma: no cover - optional dependency
     def load_dotenv():
         return None
 
-from fastapi import FastAPI
+try:
+    from fastapi import FastAPI
+except Exception:  # pragma: no cover - optional dependency
+    from ._stubs import FastAPI
 
+# import routers after ensuring FastAPI is available (routers themselves
+# fall back to stubs for missing deps)
 from .routers.graph import router as graph_router
 from .routers.psych import router as psych_router
 from .routers.ingest import router as ingest_router

@@ -1,4 +1,7 @@
-from fastapi import APIRouter
+try:
+    from fastapi import APIRouter
+except Exception:  # pragma: no cover - optional dependency
+    from .._stubs import APIRouter
 
 from ..modules.social_graph import get_social_graph_score
 
