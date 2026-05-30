@@ -7,12 +7,22 @@ def combine_scores(
     psych: dict[str, Any],
     behavioral: dict[str, Any],
 ) -> dict[str, Any]:
+    score_max = 1000
+
+    def _score_value(payload: dict[str, Any], key: str) -> float:
+        value = payload.get(key)
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return 0.0
+
     scores = [
-        social.get("social_score", 0.0),
-        psych.get("psych_score", 0.0),
-        behavioral.get("behavioral_score", 0.0),
+        _score_value(social, "social_score"),
+        _score_value(psych, "psych_score"),
+        _score_value(behavioral, "behavioral_score"),
     ]
-    final_score = round(sum(scores) / max(len(scores), 1), 3)
+    final_score = round(sum(scores) / max(len(scores), 1))
+    final_score = max(0, min(score_max, final_score))
 
     return {
         "merchant_id": merchant_id,
