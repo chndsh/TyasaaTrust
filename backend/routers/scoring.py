@@ -1,16 +1,34 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 
 from backend.modules.behavioral import get_behavioral_score
 from backend.modules.fusion import combine_scores
-from backend.modules.psychometric import get_psychometric_score
+# Import the actual functions that exist in your psychometric module
+from backend.modules.psychometric import score_session 
 from backend.modules.social_graph import get_social_graph_score
 
 router = APIRouter()
 
+class ScoringPayload(BaseModel):
+    session_id: str
+    answers: dict[str, str]
 
-@router.get("/{merchant_id}")
-def score_merchant(merchant_id: str):
-    social = get_social_graph_score(merchant_id)
-    psych = get_psychometric_score(merchant_id)
-    behavioral = get_behavioral_score(merchant_id)
-    return combine_scores(merchant_id, social, psych, behavioral)
+@router.post("/score")
+def score_merchant_session(payload: ScoringPayload):
+    try:
+        # 1. Score the active psychometric session from Redis
+        psych_result = score_session(payload.session_id, payload.answers)
+        merchant_id = psych_result["merchant_id"]
+        psych_score = psych_result["psych_score"]
+        
+        # 2. Gather corresponding metrics from sister engines
+        social_score = get_social_graph_score(merchant_id)
+        behavioral_score = get_behavioral_score(merchant_id)
+        
+        # 3. Fuse the analytics vectors together
+        return combine_scores(merchant_id, social_score, psych_score, behavioral_score)
+        
+    except KeyError as e:
+        raise HTTPException(status_code=440, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))

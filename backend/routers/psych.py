@@ -25,7 +25,7 @@ from backend.modules.psychometric import (
     score_session,
 )
 
-router = APIRouter(prefix="/psych", tags=["Psychometric"])
+router = APIRouter(tags=["Psychometric"])
 
 
 # ---------------------------------------------------------------------------

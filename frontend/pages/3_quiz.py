@@ -188,39 +188,66 @@ html, body, [class*="css"] {
     letter-spacing: 0.02em;
 }
 
-/* ── Option buttons — rendered as styled HTML radio cards ── */
-.option-card {
-    background: #fdf6e8;
-    border: 1.5px solid #d4bc96;
-    border-radius: 2px;
-    padding: 0.9rem 1.1rem 0.9rem 1rem;
-    margin-bottom: 0.6rem;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    display: flex;
-    gap: 0.8rem;
-    align-items: flex-start;
-    animation: fadeSlideIn 0.5s ease forwards;
+/* ── Radio widget restyled as clickable option cards ──
+   Target the outer div wrapping each radio item and make
+   the entire label surface into a bordered card.           */
+
+/* Container: stack cards vertically with no extra gap */
+div[data-testid="stRadio"] > div {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 0.55rem !important;
 }
-.option-card:hover {
-    border-color: #c0392b;
-    background: #fef9f0;
-    transform: translateX(3px);
-    box-shadow: 2px 3px 8px rgba(192,57,43,0.1);
+
+/* Each radio item wrapper */
+div[data-testid="stRadio"] > div > label {
+    display: flex !important;
+    align-items: flex-start !important;
+    gap: 0.85rem !important;
+    background: #fdf6e8 !important;
+    border: 1.5px solid #d4bc96 !important;
+    border-radius: 2px !important;
+    padding: 0.85rem 1.1rem !important;
+    cursor: pointer !important;
+    transition: border-color 0.2s ease, background 0.2s ease,
+                transform 0.15s ease, box-shadow 0.2s ease !important;
+    animation: fadeSlideIn 0.45s ease forwards !important;
+    width: 100% !important;
 }
-.option-id {
-    font-family: 'Playfair Display', serif;
-    font-size: 0.85rem;
-    font-weight: 800;
-    color: #c0392b;
-    min-width: 18px;
-    margin-top: 0.05rem;
+
+div[data-testid="stRadio"] > div > label:hover {
+    border-color: #c0392b !important;
+    background: #fef9f0 !important;
+    transform: translateX(3px) !important;
+    box-shadow: 2px 3px 8px rgba(192,57,43,0.1) !important;
 }
-.option-text {
-    font-family: 'Lora', serif;
-    font-size: 0.95rem;
-    line-height: 1.55;
-    color: #2c1f0e;
+
+/* Hide the native radio circle — the card border IS the selector */
+div[data-testid="stRadio"] > div > label > div:first-child {
+    display: none !important;
+}
+
+/* The text span inside the label */
+div[data-testid="stRadio"] > div > label > div > p,
+div[data-testid="stRadio"] > div > label p {
+    font-family: 'Lora', serif !important;
+    font-size: 0.95rem !important;
+    line-height: 1.6 !important;
+    color: #2c1f0e !important;
+    margin: 0 !important;
+}
+
+/* Selected state — vermillion left border + tinted background */
+div[data-testid="stRadio"] > div > label:has(input:checked) {
+    border-color: #c0392b !important;
+    border-left-width: 4px !important;
+    background: #fef3ee !important;
+    box-shadow: 2px 3px 10px rgba(192,57,43,0.12) !important;
+}
+
+div[data-testid="stRadio"] > div > label:has(input:checked) p {
+    color: #1a1208 !important;
+    font-weight: 500 !important;
 }
 
 /* ── Navigation buttons ── */
@@ -246,16 +273,7 @@ html, body, [class*="css"] {
     cursor: not-allowed !important;
 }
 
-/* ── Radio widget — hide Streamlit default, we use custom cards ── */
-.stRadio > label {
-    font-family: 'Lora', serif !important;
-    font-size: 0.95rem !important;
-    color: #2c1f0e !important;
-}
-.stRadio [data-testid="stMarkdownContainer"] p {
-    font-family: 'Lora', serif !important;
-    font-size: 0.95rem !important;
-}
+
 
 /* ── Result page ── */
 .result-header {
@@ -551,32 +569,17 @@ def render_question() -> None:
         unsafe_allow_html=True,
     )
 
-    # ── Option cards — rendered as visual HTML then captured via radio ──
-    # We render the styled option cards for visual quality, and use a
-    # Streamlit radio widget (hidden label) for actual state capture.
-    # The two are kept in sync via session_state.quiz_selected.
+    # ── Option radio cards ──
+    # Each label is styled by CSS into a full-width clickable card.
+    # The native radio circle is hidden via CSS — clicking anywhere
+    # on the card surface triggers selection. The option letter (A/B/C/D)
+    # is prepended to the label text so it appears bold in the card.
+    # Parsing chosen_id just splits on the first "  —  " separator.
 
-    option_labels = {
-        opt["id"]: opt["text"]
+    radio_options = [
+        f"**{opt['id']}**  —  {opt['text']}"
         for opt in question["options"]
-    }
-
-    # Render styled option preview cards
-    for opt in question["options"]:
-        st.markdown(
-            f"""
-            <div class="option-card">
-                <span class="option-id">{opt['id']}</span>
-                <span class="option-text">{opt['text']}</span>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    st.markdown("<br/>", unsafe_allow_html=True)
-
-    # Functional radio widget for selection
-    radio_options = [f"{opt['id']}  —  {opt['text']}" for opt in question["options"]]
+    ]
     raw_key = f"radio_q_{question['id']}"
 
     chosen_label = st.radio(
@@ -587,8 +590,12 @@ def render_question() -> None:
         label_visibility="collapsed",
     )
 
-    # Parse option ID from the selected label string
-    chosen_id = chosen_label.split("  —  ")[0].strip() if chosen_label else None
+    # Parse option ID from the selected label (strip markdown bold markers)
+    if chosen_label:
+        raw_id = chosen_label.split("  —  ")[0].replace("**", "").strip()
+    else:
+        raw_id = None
+    chosen_id = raw_id
     st.session_state.quiz_selected = chosen_id
 
     st.markdown("<br/>", unsafe_allow_html=True)
