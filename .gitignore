@@ -2,3 +2,7 @@
 .venv
 __pycache__
 *.sql
+.pytest_cache/
+.mypy_cache/
+data/staged/
+models/
