@@ -10,7 +10,7 @@ This is everything that should exist in the repository after the first setup.
 If a file is missing, do not create it in the wrong place.
 
 ```
-alt-trust-layer/                   ← root of the repo
+TyasaaTrust/                       ← root of the repo
 │
 ├── docker-compose.yml             ← starts databases/servers only
 ├── requirements.txt               ← all Python packages (backend + frontend)
@@ -75,14 +75,14 @@ When `docker compose up` is running, these are available on your machine:
 
 ```bash
 # On the person who received the Docker + requirements files
-cd alt-trust-layer
+cd TyasaaTrust
 
 git init
 git add .
 git commit -m "chore: initial project setup"
 
 # Create a new repo on GitHub (do NOT initialise with README)
-git remote add origin https://github.com/<your-org>/alt-trust-layer.git
+git remote add origin https://github.com/<your-org>/TyasaaTrust.git
 git branch -M main
 git push -u origin main
 ```
@@ -90,8 +90,8 @@ git push -u origin main
 ### 2. The other two people clone it
 
 ```bash
-git clone https://github.com/<your-org>/alt-trust-layer.git
-cd alt-trust-layer
+git clone https://github.com/<your-org>/TyasaaTrust.git
+cd TyasaaTrust
 ```
 
 ### 3. Everyone creates their `.env` file
