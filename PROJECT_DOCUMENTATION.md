@@ -260,6 +260,14 @@ POST /ingest/digital-footprint
 }
 ```
 
+---
+
+### Frontend Path Architecture & Context Boundaries
+
+1. **Context Alignment:** The Streamlit engine is systematically initialized from the `TyasaaTrust/` workspace root directory. This gives the frontend asset pipelines direct visibility over project assets, configurations, and environment modules (`.env`).
+2. **Cross-Layer Monolith Imports:** By injecting the `sys.path` patcher at the entry points of frontend pages, the UI dashboard can seamlessly pull shared Pydantic data schemas, ML models (`scikit-learn`/`shap`), and validation layers directly from the `backend/` engine directory without experiencing environment breaks.
+3. **Execution Safety Rule:** Running `streamlit run app.py` while inside the `frontend/` directory is strictly deprecated to maintain internal route uniformity.
+
 #### `backend/routers/scoring.py`
 **Purpose:** Composite trust score orchestration  
 **Ownership:** Person C  
