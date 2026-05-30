@@ -133,6 +133,22 @@ The first run after installing dependencies takes a bit longer; after that it is
 
 ---
 
+## Development & Execution Standard
+
+### Frontend UI Execution
+```bash
+# 1. Ensure you are in the repository root directory
+cd /path/to/TyasaaTrust
+
+# 2. Activate your virtual environment
+source venv/bin/activate
+
+# 3. Spin up the Streamlit interface using the root-relative path target
+streamlit run frontend/app.py --server.port 8501
+```
+
+---
+
 ## Daily workflow — how to start each day
 
 ```bash
