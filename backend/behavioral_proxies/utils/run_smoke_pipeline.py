@@ -1,19 +1,26 @@
 from __future__ import annotations
 
+import os
+import sys
 from pathlib import Path
 
 import pandas as pd
 
-from ..models.train import (
+# Support direct execution from the repository root or this file path.
+package_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if package_root not in sys.path:
+    sys.path.insert(0, package_root)
+
+from models.train import (
     train_xgboost_with_validation,
     save_model,
     train_logistic_regression,
 )
-from ..evaluation.explain import (
+from evaluation.explain import (
     generate_shap_explanations,
     explanations_to_json,
 )
-from ..models.predict import score_accounts
+from models.predict import score_accounts
 
 
 def run(out_dir: Path | str = "data/staged/csv") -> dict:

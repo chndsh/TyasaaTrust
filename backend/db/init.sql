@@ -1,76 +1,165 @@
--- Behavioral proxies staging and features (PostgreSQL)
+-- Transaction schema and mock seed data for PostgreSQL
 
-CREATE TABLE IF NOT EXISTS utilities_payments (
-	id BIGSERIAL PRIMARY KEY,
-	account_id_hash TEXT NOT NULL,
-	provider TEXT NOT NULL,
-	billing_period_start DATE NOT NULL,
-	billing_period_end DATE NOT NULL,
-	billed_amount NUMERIC(12, 2) NOT NULL,
-	payment_date DATE,
-	payment_amount NUMERIC(12, 2),
-	payment_method TEXT,
-	created_at TIMESTAMPTZ DEFAULT NOW()
+BEGIN;
+
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+DROP FUNCTION IF EXISTS get_transactions_by_merchant(TEXT);
+DROP TABLE IF EXISTS transactions CASCADE;
+DROP TABLE IF EXISTS behavioral_scores CASCADE;
+DROP TABLE IF EXISTS behavioral_features CASCADE;
+DROP TABLE IF EXISTS seasonality_calendar CASCADE;
+DROP TABLE IF EXISTS airtime_topups CASCADE;
+DROP TABLE IF EXISTS utilities_payments CASCADE;
+
+CREATE TABLE IF NOT EXISTS transactions (
+	transaction_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+	initiating_merchant_id TEXT NOT NULL,
+	initiating_merchant_name TEXT NOT NULL,
+	receiving_merchant_id TEXT NOT NULL,
+	receiving_merchant_name TEXT NOT NULL,
+	transaction_amount NUMERIC(12, 2) NOT NULL CHECK (transaction_amount > 0),
+	transaction_date DATE NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_utilities_account_id_hash
-	ON utilities_payments (account_id_hash);
+CREATE INDEX IF NOT EXISTS idx_transactions_initiating_merchant_id
+	ON transactions (initiating_merchant_id, transaction_date);
 
-CREATE TABLE IF NOT EXISTS airtime_topups (
-	id BIGSERIAL PRIMARY KEY,
-	account_id_hash TEXT NOT NULL,
-	topup_ts TIMESTAMPTZ NOT NULL,
-	topup_amount NUMERIC(12, 2) NOT NULL,
-	vendor TEXT,
-	created_at TIMESTAMPTZ DEFAULT NOW()
-);
+CREATE INDEX IF NOT EXISTS idx_transactions_receiving_merchant_id
+	ON transactions (receiving_merchant_id, transaction_date);
 
-CREATE INDEX IF NOT EXISTS idx_airtime_account_id_hash
-	ON airtime_topups (account_id_hash);
+CREATE INDEX IF NOT EXISTS idx_transactions_transaction_date
+	ON transactions (transaction_date);
 
-CREATE TABLE IF NOT EXISTS seasonality_calendar (
-	id BIGSERIAL PRIMARY KEY,
-	region_id TEXT NOT NULL,
-	season_label TEXT NOT NULL,
-	season_start_month SMALLINT NOT NULL,
-	season_end_month SMALLINT NOT NULL,
-	created_at TIMESTAMPTZ DEFAULT NOW()
-);
+CREATE OR REPLACE FUNCTION get_transactions_by_merchant(p_merchant_id TEXT)
+RETURNS TABLE (
+	merchant_id TEXT,
+	merchant_name TEXT,
+	collaborating_merchant_id TEXT,
+	collaborating_merchant_name TEXT,
+	collaborating_merchant TEXT,
+	transaction_type TEXT,
+	transaction_amount NUMERIC(12, 2),
+	transaction_date DATE
+)
+LANGUAGE sql
+STABLE
+AS $$
+	SELECT
+		t.initiating_merchant_id AS merchant_id,
+		t.initiating_merchant_name AS merchant_name,
+		t.receiving_merchant_id AS collaborating_merchant_id,
+		t.receiving_merchant_name AS collaborating_merchant_name,
+		format('%s (%s)', t.receiving_merchant_name, t.receiving_merchant_id) AS collaborating_merchant,
+		'paid'::TEXT AS transaction_type,
+		t.transaction_amount,
+		t.transaction_date
+	FROM transactions AS t
+	WHERE t.initiating_merchant_id = p_merchant_id
 
-CREATE TABLE IF NOT EXISTS behavioral_features (
-	id BIGSERIAL PRIMARY KEY,
-	account_id_hash TEXT NOT NULL,
-	as_of_date DATE NOT NULL,
-	on_time_ratio NUMERIC(6, 4),
-	utility_payment_consistency NUMERIC(6, 4),
-	std_interpayment_days NUMERIC(10, 4),
-	missed_count INTEGER,
-	payment_amount_cv NUMERIC(10, 4),
-	days_since_last_payment INTEGER,
-	topup_freq_per_month NUMERIC(10, 4),
-	median_topup_amount NUMERIC(12, 2),
-	large_topup_ratio NUMERIC(6, 4),
-	burstiness NUMERIC(10, 4),
-	recharge_variance NUMERIC(10, 4),
-	seasonal_amplitude NUMERIC(10, 4),
-	harvest_aligned_spike NUMERIC(10, 4),
-	rolling_monthly_variance NUMERIC(10, 4),
-	seasonal_recovery_score NUMERIC(10, 4),
-	created_at TIMESTAMPTZ DEFAULT NOW()
-);
+	UNION ALL
 
-CREATE INDEX IF NOT EXISTS idx_behavioral_features_account_id_hash
-	ON behavioral_features (account_id_hash, as_of_date);
+	SELECT
+		t.receiving_merchant_id AS merchant_id,
+		t.receiving_merchant_name AS merchant_name,
+		t.initiating_merchant_id AS collaborating_merchant_id,
+		t.initiating_merchant_name AS collaborating_merchant_name,
+		format('%s (%s)', t.initiating_merchant_name, t.initiating_merchant_id) AS collaborating_merchant,
+		'received'::TEXT AS transaction_type,
+		t.transaction_amount,
+		t.transaction_date
+	FROM transactions AS t
+	WHERE t.receiving_merchant_id = p_merchant_id
 
-CREATE TABLE IF NOT EXISTS behavioral_scores (
-	id BIGSERIAL PRIMARY KEY,
-	account_id_hash TEXT NOT NULL,
-	as_of_date DATE NOT NULL,
-	score NUMERIC(6, 4) NOT NULL,
-	model_version TEXT,
-	score_details JSONB,
-	created_at TIMESTAMPTZ DEFAULT NOW()
-);
+	ORDER BY transaction_date, transaction_type, collaborating_merchant_id;
+$$;
 
-CREATE INDEX IF NOT EXISTS idx_behavioral_scores_account_id_hash
-	ON behavioral_scores (account_id_hash, as_of_date);
+WITH month_anchors AS (
+	SELECT
+		month_index,
+		(date_trunc('month', CURRENT_DATE) - ((11 - month_index) || ' months')::INTERVAL + INTERVAL '14 days')::DATE AS anchor_date
+	FROM generate_series(0, 11) AS month_index
+),
+utility_config AS (
+	SELECT *
+	FROM (VALUES
+		(1, '9800000004', 'NEA', 1600::NUMERIC, 120::NUMERIC, 5),
+		(2, '9800000005', 'KUKL', 1100::NUMERIC, 90::NUMERIC, 12),
+		(3, '9800000006', 'Internet', 1800::NUMERIC, 150::NUMERIC, 20)
+	) AS t(sort_order, merchant_id, merchant_name, base_amount, monthly_increase, payment_day)
+)
+INSERT INTO transactions (
+	initiating_merchant_id,
+	initiating_merchant_name,
+	receiving_merchant_id,
+	receiving_merchant_name,
+	transaction_amount,
+	transaction_date
+)
+SELECT
+	'9800000000',
+	'Sajilo Kirana',
+	u.merchant_id,
+	u.merchant_name,
+	(u.base_amount + (u.monthly_increase * m.month_index))::NUMERIC(12, 2),
+	make_date(
+		EXTRACT(YEAR FROM m.anchor_date)::INT,
+		EXTRACT(MONTH FROM m.anchor_date)::INT,
+		LEAST(
+			u.payment_day,
+			EXTRACT(DAY FROM (DATE_TRUNC('month', m.anchor_date) + INTERVAL '1 month - 1 day'))::INT
+		)
+	)
+FROM month_anchors AS m
+CROSS JOIN utility_config AS u
+ORDER BY m.anchor_date, u.sort_order;
+
+WITH month_anchors AS (
+	SELECT
+		month_index,
+		(date_trunc('month', CURRENT_DATE) - ((11 - month_index) || ' months')::INTERVAL + INTERVAL '14 days')::DATE AS anchor_date
+	FROM generate_series(0, 11) AS month_index
+),
+fraud_plan AS (
+	SELECT *
+	FROM (VALUES
+		(1, 25000::NUMERIC, 1),
+		(4, 25500::NUMERIC, 2),
+		(7, 26000::NUMERIC, 3),
+		(10, 26500::NUMERIC, 4)
+	) AS t(month_index, amount, plan_order)
+),
+fraud_ring AS (
+	SELECT *
+	FROM (VALUES
+		(1, '9800000001', 'Himal Wholesale', '9800000002', 'Bhaktapur Supplies'),
+		(2, '9800000002', 'Bhaktapur Supplies', '9800000003', 'Thamel Traders'),
+		(3, '9800000003', 'Thamel Traders', '9800000001', 'Himal Wholesale')
+	) AS t(ring_order, initiating_merchant_id, initiating_merchant_name, receiving_merchant_id, receiving_merchant_name)
+)
+INSERT INTO transactions (
+	initiating_merchant_id,
+	initiating_merchant_name,
+	receiving_merchant_id,
+	receiving_merchant_name,
+	transaction_amount,
+	transaction_date
+)
+SELECT
+	f.initiating_merchant_id,
+	f.initiating_merchant_name,
+	f.receiving_merchant_id,
+	f.receiving_merchant_name,
+	f.amount::NUMERIC(12, 2),
+	make_date(
+		EXTRACT(YEAR FROM m.anchor_date)::INT,
+		EXTRACT(MONTH FROM m.anchor_date)::INT,
+		10 + r.ring_order - 1
+	)
+FROM fraud_plan AS f
+JOIN month_anchors AS m
+	ON m.month_index = f.month_index
+CROSS JOIN fraud_ring AS r
+ORDER BY f.plan_order, r.ring_order;
+
+COMMIT;

@@ -40,7 +40,21 @@ def generate_shap_explanations(
     try:
         explainer = shap.TreeExplainer(model)
     except Exception:
-        explainer = shap.Explainer(model, X)
+        # shap.Explainer expects either a model object it understands or a
+        # callable. Wrap sklearn Pipelines / non-tree estimators into a
+        # callable that returns a 1-D score/probability so SHAP can run.
+        if hasattr(model, "predict_proba"):
+            def _model_callable(data):
+                return model.predict_proba(data)[:, 1]
+
+            explainer = shap.Explainer(_model_callable, X)
+        elif hasattr(model, "predict"):
+            def _model_callable(data):
+                return model.predict(data)
+
+            explainer = shap.Explainer(_model_callable, X)
+        else:
+            explainer = shap.Explainer(model, X)
 
     # Compute shap values
     try:

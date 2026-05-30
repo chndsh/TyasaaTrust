@@ -6,7 +6,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from ..utils.schema import FEATURE_COLUMNS
+from schema import FEATURE_COLUMNS
+
 
 
 def make_synthetic(n=500, seed=42):
