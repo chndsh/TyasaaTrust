@@ -1,8 +1,11 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
-from modules.psychometric import score_responses
+
+from ..modules.psychometric import score_responses
 
 router = APIRouter()
+
+QUESTIONS: list[dict] = []
 
 class QuizSubmission(BaseModel):
     merchant_id: str
@@ -20,5 +23,4 @@ async def submit_quiz(submission: QuizSubmission):
 
 @router.get("/questions")
 async def get_questions():
-    from data.questions import QUESTIONS
     return {"questions": QUESTIONS}

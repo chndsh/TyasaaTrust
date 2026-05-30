@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
-from modules.behavioral import summarize_digital_footprint
+from ..modules.behavioral import summarize_digital_footprint
 
 router = APIRouter()
 

@@ -1,10 +1,15 @@
-from dotenv import load_dotenv
+try:
+    from dotenv import load_dotenv
+except Exception:  # pragma: no cover - optional dependency
+    def load_dotenv():
+        return None
+
 from fastapi import FastAPI
 
-from routers.graph import router as graph_router
-from routers.psych import router as psych_router
-from routers.ingest import router as ingest_router
-from routers.scoring import router as scoring_router
+from .routers.graph import router as graph_router
+from .routers.psych import router as psych_router
+from .routers.ingest import router as ingest_router
+from .routers.scoring import router as scoring_router
 
 load_dotenv()
 
