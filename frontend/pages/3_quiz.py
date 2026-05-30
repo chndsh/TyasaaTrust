@@ -8,7 +8,7 @@
 #   quiz_current_index   int   — which question we are on (0–4)
 #   quiz_answers         dict  — {question_id: option_id} accumulated answers
 #   quiz_result          dict  — ScoreResult returned after submission
-#   quiz_merchant_id     str   — merchant UUID (passed in via query param or set here)
+#   quiz_merchant_id     str   — 10-digit merchant ID (passed in via query param or set here)
 #   quiz_state           str   — "intro" | "question" | "submitting" | "result" | "error"
 #   quiz_error_msg       str   — human-readable error for the error state
 
@@ -437,7 +437,7 @@ def _init_state() -> None:
         "quiz_answers":       {},
         "quiz_result":        None,
         "quiz_error_msg":     "",
-        "quiz_merchant_id":   st.query_params.get("merchant_id", "demo-merchant-001"),
+        "quiz_merchant_id":   st.query_params.get("merchant_id", "9800000000"),
         "quiz_selected":      None,   # holds radio selection for current question
     }
     for key, val in defaults.items():
@@ -685,9 +685,9 @@ TRAIT_DISPLAY_NAMES = {
 
 def _verdict(score: float) -> tuple[str, str]:
     """Return (label, css_class) based on composite score."""
-    if score >= 0.70:
+    if score >= 700:
         return "Strong Trust Profile",  "verdict-high"
-    if score >= 0.45:
+    if score >= 450:
         return "Developing Trust Profile", "verdict-mid"
     return "Needs Improvement", "verdict-low"
 
@@ -699,7 +699,7 @@ def render_result() -> None:
     psych_score = result["psych_score"]
     breakdown   = result["breakdown"]
 
-    score_pct   = round(psych_score * 100, 1)
+    score_value = round(psych_score, 1)
     verdict_lbl, verdict_cls = _verdict(psych_score)
 
     # ── Score ring ──
@@ -708,8 +708,8 @@ def render_result() -> None:
         <div class="result-score-ring">
             <p class="result-header">Assessment Complete</p>
             <div style="margin:1rem 0;">
-                <span class="score-number">{score_pct}</span>
-                <span class="score-denom"> / 100</span>
+                <span class="score-number">{score_value}</span>
+                <span class="score-denom"> / 1000</span>
             </div>
             <div>
                 <span class="verdict-badge {verdict_cls}">{verdict_lbl}</span>

@@ -7,7 +7,12 @@ router = APIRouter()
 
 
 class DigitalFootprintPayload(BaseModel):
-    merchant_id: str
+    merchant_id: str = Field(
+        ...,
+        description="10-digit merchant ID being assessed.",
+        examples=["9800000000"],
+        pattern=r"^\d{10}$",
+    )
     events: list[dict] = Field(default_factory=list)
 
 

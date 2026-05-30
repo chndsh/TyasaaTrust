@@ -313,6 +313,14 @@ You can override this via the `API_URL` environment variable (see `.env.example`
 
 ---
 
+## Merchant ID format
+
+- Merchant IDs are **10-digit numeric strings**.
+- The default test merchant ID is **9800000000**.
+- All trust and component scores are scaled from **0 to 1000**.
+
+---
+
 ## Database access
 
 The database schema is created automatically from `backend/db/init.sql`
@@ -361,7 +369,7 @@ docker compose ps
 # 5. Hit the full scoring endpoint
 python -c "
 import httpx
-r = httpx.get('http://localhost:8000/scores/00000000-0000-0000-0000-000000000001')
+r = httpx.get('http://localhost:8000/scores/9800000000')
 import json; print(json.dumps(r.json(), indent=2))
 "
 

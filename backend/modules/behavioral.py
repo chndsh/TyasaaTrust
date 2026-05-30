@@ -4,7 +4,7 @@ from typing import Any
 def get_behavioral_score(merchant_id: str) -> dict[str, Any]:
     return {
         "merchant_id": merchant_id,
-        "behavioral_score": 0.6,
+        "behavioral_score": 600,
         "signals": {
             "review_sentiment": 0.63,
             "chargeback_rate": 0.04,

@@ -288,7 +288,7 @@ def score_session(
     Returns
     -------
     ScoreResult
-        Composite psych_score in [0.0, 1.0], per-trait breakdown,
+        Composite psych_score in [0, 1000], per-trait breakdown,
         echoed answers, and a UTC timestamp.
 
     Raises
@@ -340,17 +340,17 @@ def score_session(
     breakdown: dict[str, TraitBreakdown] = {}
     for trait, raw in raw_scores.items():
         normalized = raw / MAX_RAW_PER_TRAIT
-        weighted   = normalized * TRAIT_WEIGHTS[trait]
+        weighted   = normalized * TRAIT_WEIGHTS[trait] * 1000
         breakdown[trait] = {
             "raw":        raw,
             "max":        MAX_RAW_PER_TRAIT,
             "normalized": round(normalized, 4),
-            "weighted":   round(weighted,   4),
+            "weighted":   round(weighted,   2),
         }
 
     # --- Composite score -----------------------------------------------------
     psych_score = round(
-        sum(t["weighted"] for t in breakdown.values()), 4
+        sum(t["weighted"] for t in breakdown.values()), 2
     )
 
     # --- Mark submitted and persist back to Redis ----------------------------
