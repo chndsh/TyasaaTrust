@@ -9,7 +9,7 @@ class QuizSubmission(BaseModel):
     responses: list[dict]   # [{"question": str, "answer": str, "trait": str}]
 
 @router.post("/submit")
-async def submit_quiz(submission: QuizSubmission):
+def submit_quiz(submission: QuizSubmission):
     result = score_responses(submission.responses)
     return {
         "merchant_id": submission.merchant_id,
@@ -19,6 +19,6 @@ async def submit_quiz(submission: QuizSubmission):
     }
 
 @router.get("/questions")
-async def get_questions():
+def get_questions():
     from data.questions import QUESTIONS
     return {"questions": QUESTIONS}

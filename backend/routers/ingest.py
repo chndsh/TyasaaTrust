@@ -12,7 +12,7 @@ class DigitalFootprintPayload(BaseModel):
 
 
 @router.post("/digital-footprint")
-async def ingest_digital_footprint(payload: DigitalFootprintPayload):
+def ingest_digital_footprint(payload: DigitalFootprintPayload):
     summary = summarize_digital_footprint(payload.events)
     return {
         "merchant_id": payload.merchant_id,

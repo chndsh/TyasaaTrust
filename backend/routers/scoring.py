@@ -9,7 +9,7 @@ router = APIRouter()
 
 
 @router.get("/{merchant_id}")
-async def score_merchant(merchant_id: str):
+def score_merchant(merchant_id: str):
     social = get_social_graph_score(merchant_id)
     psych = get_psychometric_score(merchant_id)
     behavioral = get_behavioral_score(merchant_id)
