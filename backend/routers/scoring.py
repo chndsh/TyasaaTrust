@@ -1,13 +1,14 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Path
 from pydantic import BaseModel
 
 from backend.modules.behavioral import get_behavioral_score
 from backend.modules.fusion import combine_scores
 # Import the actual functions that exist in your psychometric module
-from backend.modules.psychometric import score_session 
+from backend.modules.psychometric import get_psychometric_score, score_session
 from backend.modules.social_graph import get_social_graph_score
 
 router = APIRouter()
+MERCHANT_ID_PATTERN = r"^\d{10}$"
 
 class ScoringPayload(BaseModel):
     session_id: str
@@ -19,16 +20,33 @@ def score_merchant_session(payload: ScoringPayload):
         # 1. Score the active psychometric session from Redis
         psych_result = score_session(payload.session_id, payload.answers)
         merchant_id = psych_result["merchant_id"]
-        psych_score = psych_result["psych_score"]
-        
+
         # 2. Gather corresponding metrics from sister engines
         social_score = get_social_graph_score(merchant_id)
         behavioral_score = get_behavioral_score(merchant_id)
         
         # 3. Fuse the analytics vectors together
-        return combine_scores(merchant_id, social_score, psych_score, behavioral_score)
+        return combine_scores(merchant_id, social_score, psych_result, behavioral_score)
         
     except KeyError as e:
         raise HTTPException(status_code=440, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/{merchant_id}")
+def score_merchant(
+    merchant_id: str = Path(
+        ...,
+        pattern=MERCHANT_ID_PATTERN,
+        description="10-digit numeric merchant identifier.",
+        examples=["9800000000"],
+    )
+):
+    try:
+        social_score = get_social_graph_score(merchant_id)
+        psych_score = get_psychometric_score(merchant_id)
+        behavioral_score = get_behavioral_score(merchant_id)
+        return combine_scores(merchant_id, social_score, psych_score, behavioral_score)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
