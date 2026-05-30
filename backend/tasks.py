@@ -1,5 +1,12 @@
-from celery import Celery
 import os
+import sys
+
+# Compute the absolute path to the project root directory
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+from celery import Celery
 
 # Rename your variable instance to matches Celery's default inspection pattern
 celery = Celery(

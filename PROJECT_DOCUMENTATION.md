@@ -660,3 +660,15 @@ curl http://localhost:8000/scores/merchant-123
 ## Summary
 
 **TyasaaTrust** is a well-structured, modular hackathon project designed for rapid parallel development. It separates concerns into independent modules (social, psychometric, behavioral), exposes them via clean REST APIs, and visualizes results through a Streamlit dashboard. The stub-based architecture allows all three team members to develop simultaneously while maintaining end-to-end system cohesion. The fusion approach produces transparent, multi-dimensional trust scores that users can understand and act upon.
+
+---
+
+## Architectural Decisions: Import Path Resolution
+
+### Problem Statement
+The application previously suffered from inconsistent execution boundaries, where executing commands from inside subdirectories caused absolute imports to fail, and root execution caused local subdirectory imports to fail.
+
+### Implemented Solution
+1. **Root-Anchored Scoping:** The repository standardizes on **Root Execution**. The root folder `TyasaaTrust/` serves as the primary workspace reference point.
+2. **Dynamic Entrypoint Patching:** Critical entrypoints dynamically prepend the absolute path of the workspace to `sys.path` at runtime via `sys.path.insert(0, project_root)`. This ensures that even if a utility script is executed standalone, it retains access to the global `backend` module namespace.
+3. **Absolute Package Formatting:** All internal cross-module references must explicitly use the full package path syntax: `from backend.<module>.<submodule> import <component>`.
