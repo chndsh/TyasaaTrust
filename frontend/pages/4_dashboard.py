@@ -9,7 +9,12 @@ load_dotenv()
 API_URL = os.getenv("API_URL", "http://localhost:8000")
 
 st.title("Trust Score Dashboard")
-merchant_id = st.text_input("Merchant ID", value="merchant-demo")
+merchant_id = st.text_input(
+    "Merchant ID",
+    value="9800000000",
+    max_chars=10,
+    help="Enter the 10-digit merchant ID.",
+)
 
 if st.button("Refresh scores"):
     with st.spinner("Fetching scores..."):

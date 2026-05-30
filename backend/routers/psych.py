@@ -40,8 +40,9 @@ router = APIRouter(tags=["Psychometric"])
 class StartSessionRequest(BaseModel):
     merchant_id: str = Field(
         ...,
-        description="UUID of the merchant being assessed.",
-        examples=["00000000-0000-0000-0000-000000000001"],
+        description="10-digit merchant ID being assessed.",
+        examples=["9800000000"],
+        pattern=r"^\d{10}$",
     )
 
 
@@ -177,7 +178,7 @@ def start_session(body: StartSessionRequest) -> StartSessionResponse:
     """
     POST /psych/session/start
 
-    Request body:  { "merchant_id": "<uuid>" }
+    Request body:  { "merchant_id": "<10-digit id>" }
     Response:      session_id, created_at, 5 stripped questions
     """
     try:
@@ -233,7 +234,7 @@ def retrieve_session(session_id: str) -> SessionStatusResponse:
     summary="Submit answers and receive the psychometric score",
     description=(
         "Accepts the merchant's answers and runs the Weighted Additive Model "
-        "scoring algorithm. Returns the composite psych_score in [0.0, 1.0] "
+        "scoring algorithm. Returns the composite psych_score in [0, 1000] "
         "and a full per-trait breakdown. Each session may only be submitted once."
     ),
 )
@@ -247,7 +248,7 @@ def submit_answers(
     Request body:  { "answers": { "<question_id>": "<option_id>", ... } }
     Response:      psych_score, per-trait breakdown, echoed answers, timestamp
 
-    The psych_score float is the value Person C's fusion.py should consume
+    The psych_score (0–1000) is the value Person C's fusion.py should consume
     when computing the final trust score for this merchant.
     """
     try:

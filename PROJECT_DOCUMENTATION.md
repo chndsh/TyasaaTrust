@@ -163,7 +163,7 @@ Template for environment configuration (copy to `.env`):
 ```python
 get_social_graph_score(merchant_id: str) -> dict
 ```
-- Returns stub score (0.62) with social connection signals
+- Returns stub score (620) with social connection signals
 - Tracks: connection count (18), community score (0.7)
 - Ready for graph algorithm replacement (PageRank, centrality measures)
 
@@ -178,10 +178,10 @@ score_responses(responses: list[dict]) -> dict
 get_psychometric_score(merchant_id: str) -> dict
 ```
 - `score_responses`: Computes personality traits from quiz answers
-  - Scoring logic: Base 0.4 + 0.05 per response (capped at 0.95)
-  - Returns: Traits (openness, conscientiousness) and summary
+  - Scoring logic: Weighted Additive Model scaled to 0–1000
+  - Returns: Traits (integrity, financial_discipline, resilience) and summary
 - `get_psychometric_score`: Retrieves stored psychometric profile
-- Traits tracked: openness (0.6), conscientiousness (0.55)
+- Traits tracked: integrity, financial_discipline, resilience
 
 **Dependencies:** Quiz data from `backend/data/questions.py`
 
@@ -195,7 +195,7 @@ summarize_digital_footprint(events: list[dict]) -> dict
 ```
 - `get_behavioral_score`: Aggregates behavior signals
   - Tracks: review sentiment (0.63), chargeback rate (0.04)
-  - Base score: 0.6
+  - Base score: 600
 - `summarize_digital_footprint`: Processes transaction/event stream
   - Counts events and generates summary
 
@@ -208,13 +208,16 @@ summarize_digital_footprint(events: list[dict]) -> dict
 ```python
 combine_scores(merchant_id: str, social: dict, psych: dict, behavioral: dict) -> dict
 ```
-- Averages three sub-scores: (social + psych + behavioral) / 3
+- Averages three sub-scores (each 0–1000): (social + psych + behavioral) / 3
 - Returns comprehensive scoring object with all components
 - Enables transparency into score composition
 
 ---
 
 ### **Backend Routers (API Endpoints)**
+
+**Merchant ID format:** All API routes expect a **10-digit numeric merchant ID**.  
+Default test merchant ID: **9800000000**.
 
 #### `backend/routers/graph.py`
 **Purpose:** Social graph API endpoint  
@@ -237,7 +240,7 @@ POST /psych/submit        # Submit quiz responses and get scoring
 **Request Schema (POST /psych/submit):**
 ```json
 {
-  "merchant_id": "string",
+  "merchant_id": "9800000000",
   "responses": [
     {"question": "str", "answer": "str", "trait": "str"}
   ]
@@ -255,7 +258,7 @@ POST /ingest/digital-footprint
 **Request Schema:**
 ```json
 {
-  "merchant_id": "string",
+  "merchant_id": "9800000000",
   "events": [{"type": "transaction", "value": 100}, ...]
 }
 ```
@@ -414,7 +417,7 @@ GET {API_URL}/scores/{merchant_id}
 │  psychometric.py ──→ [Trait Scoring]   ──→ Psych Score          │
 │  behavioral.py   ──→ [Pattern Analysis] ──→ Behavioral Score   │
 │                              ↓                                    │
-│  fusion.py ──→ [Average Scores] ──→ Final Score (0-1)           │
+│  fusion.py ──→ [Average Scores] ──→ Final Score (0-1000)        │
 │                                                                   │
 └─────────────────────────────────────────────────────────────────┘
          ↓ Data Storage (Optional)
@@ -433,34 +436,34 @@ GET {API_URL}/scores/{merchant_id}
 
 ```
 1. Frontend (4_dashboard.py):
-   GET http://localhost:8000/scores/merchant-demo
+   GET http://localhost:8000/scores/9800000000
    
 2. Backend Router (routers/scoring.py):
-   score_merchant("merchant-demo")
+   score_merchant("9800000000")
    
 3. Orchestration:
-   ├─ Call modules.social_graph.get_social_graph_score("merchant-demo")
-   │  └─ Returns: {"social_score": 0.62, "signals": {...}}
+   ├─ Call modules.social_graph.get_social_graph_score("9800000000")
+   │  └─ Returns: {"social_score": 620, "signals": {...}}
    │
-   ├─ Call modules.psychometric.get_psychometric_score("merchant-demo")
-   │  └─ Returns: {"psych_score": 0.57, "traits": {...}}
+   ├─ Call modules.psychometric.get_psychometric_score("9800000000")
+   │  └─ Returns: {"psych_score": 570, "traits": {...}}
    │
-   ├─ Call modules.behavioral.get_behavioral_score("merchant-demo")
-   │  └─ Returns: {"behavioral_score": 0.6, "signals": {...}}
+   ├─ Call modules.behavioral.get_behavioral_score("9800000000")
+   │  └─ Returns: {"behavioral_score": 600, "signals": {...}}
    │
    └─ Call modules.fusion.combine_scores(
-       "merchant-demo", social, psych, behavioral
+       "9800000000", social, psych, behavioral
      )
-        └─ Computes: (0.62 + 0.57 + 0.6) / 3 = 0.597
+        └─ Computes: (620 + 570 + 600) / 3 = 597
         └─ Returns aggregated result
         
 4. HTTP Response (JSON):
    {
-     "merchant_id": "merchant-demo",
-     "final_score": 0.597,
-     "social_score": 0.62,
-     "psych_score": 0.57,
-     "behavioral_score": 0.6,
+     "merchant_id": "9800000000",
+     "final_score": 597,
+     "social_score": 620,
+     "psych_score": 570,
+     "behavioral_score": 600,
      "status": "stub"
    }
 
@@ -478,7 +481,7 @@ GET {API_URL}/scores/{merchant_id}
    - User selects answers
    - POST /psych/submit with:
      {
-       "merchant_id": "user-123",
+       "merchant_id": "9800000000",
        "responses": [
          {"question": "...", "answer": "Always", "trait": "conscientiousness"},
          {"question": "...", "answer": "Very comfortable", "trait": "openness"}
@@ -490,14 +493,14 @@ GET {API_URL}/scores/{merchant_id}
    
 3. Module Logic (modules/psychometric.py):
    score_responses(submission.responses)
-   - Computes score: 0.4 + (2 * 0.05) = 0.5
+   - Computes score: weighted composite scaled to 0–1000 (example: 500)
    - Extracts traits: openness, conscientiousness
    
 4. Response back to Frontend:
    {
-     "merchant_id": "user-123",
-     "psych_score": 0.5,
-     "traits": {"openness": 0.58, "conscientiousness": 0.62},
+     "merchant_id": "9800000000",
+     "psych_score": 500,
+     "traits": {"openness": 580, "conscientiousness": 620},
      "summary": "stubbed from response count"
    }
 
@@ -622,13 +625,13 @@ cd frontend && streamlit run app.py --server.port 8501
 curl http://localhost:8000/health
 # {"status":"ok"}
 
-curl http://localhost:8000/scores/merchant-123
+curl http://localhost:8000/scores/9800000000
 # {
-#   "merchant_id": "merchant-123",
-#   "final_score": 0.597,
-#   "social_score": 0.62,
-#   "psych_score": 0.57,
-#   "behavioral_score": 0.6,
+#   "merchant_id": "9800000000",
+#   "final_score": 597,
+#   "social_score": 620,
+#   "psych_score": 570,
+#   "behavioral_score": 600,
 #   "status": "stub"
 # }
 

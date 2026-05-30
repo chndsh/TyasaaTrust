@@ -8,11 +8,12 @@ def combine_scores(
     behavioral: dict[str, Any],
 ) -> dict[str, Any]:
     scores = [
-        social.get("social_score", 0.0),
-        psych.get("psych_score", 0.0),
-        behavioral.get("behavioral_score", 0.0),
+        float(social.get("social_score", 0.0)),
+        float(psych.get("psych_score", 0.0)),
+        float(behavioral.get("behavioral_score", 0.0)),
     ]
-    final_score = round(sum(scores) / max(len(scores), 1), 3)
+    average_score = sum(scores) / max(len(scores), 1)
+    final_score = max(0, min(1000, round(average_score)))
 
     return {
         "merchant_id": merchant_id,
