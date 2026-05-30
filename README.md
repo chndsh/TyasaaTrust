@@ -1,5 +1,5 @@
 # TyasaaTrust
-# Alt Trust Layer — Repo Guide
+# TyasaaTrust — Repo Guide
 ### For all three team members
 
 ---
