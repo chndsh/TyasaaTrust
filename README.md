@@ -122,13 +122,11 @@ pip install -r requirements.txt
 # Start database + redis
 docker compose up -d
 
-# Terminal 1: backend
-cd backend
-uvicorn main:app --reload --port 8000
+# Terminal 1: backend (run from repo root)
+uvicorn backend.main:app --reload --port 8000
 
-# Terminal 2: frontend
-cd frontend
-streamlit run app.py --server.port 8501
+# Terminal 2: frontend (run from repo root)
+streamlit run frontend/app.py --server.port 8501
 ```
 
 The first run after installing dependencies takes a bit longer; after that it is instant.
@@ -144,13 +142,11 @@ git pull origin main
 # 2. Start database + redis
 docker compose up -d
 
-# 3. Run backend + frontend locally (two terminals)
-cd backend
-uvicorn main:app --reload --port 8000
+# 3. Run backend + frontend locally (two terminals, from repo root)
+uvicorn backend.main:app --reload --port 8000
 
 # In another terminal
-cd frontend
-streamlit run app.py --server.port 8501
+streamlit run frontend/app.py --server.port 8501
 ```
 
 ---
@@ -375,3 +371,21 @@ import json; print(json.dumps(r.json(), indent=2))
 
 If step 5 returns a JSON object with `final_score`, `social_score`,
 `psych_score`, and `behavioral_score` all filled in — you are ready.
+
+---
+
+## Development & Execution Standard
+
+All components of this repository must be executed from the **repository root directory** (`TyasaaTrust/`). Never change directories into `backend/` to run development servers, tasks, or utilities.
+
+### Local Server Execution
+```bash
+# 1. Ensure you are in the repository root directory
+cd /path/to/TyasaaTrust
+
+# 2. Activate your virtual environment
+source venv/bin/activate
+
+# 3. Spin up the ASGI server using the root-relative module path
+uvicorn backend.main:app --reload --port 8000
+```

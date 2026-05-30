@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from modules.social_graph import get_social_graph_score
+from backend.modules.social_graph import get_social_graph_score
 
 router = APIRouter()
 
