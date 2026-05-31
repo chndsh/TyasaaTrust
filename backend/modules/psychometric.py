@@ -457,7 +457,6 @@ def get_psychometric_score(merchant_id: str) -> dict[str, Any]:
     """
     return {
         "merchant_id": merchant_id,
-        "psych_score": 0.57,
-        "traits": {"openness": 0.6, "conscientiousness": 0.55},
+        "psych_score": 620,
         "status": "stub",
     }
