@@ -2,3 +2,16 @@
 TyasaaTrust
 venv
 backend/modules/__pycache__
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+.venv/
+venv/
+ENV/
+.env
+
+# Streamlit local runtime metadata
+.streamlit/config.toml
