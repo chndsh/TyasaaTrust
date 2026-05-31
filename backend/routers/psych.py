@@ -14,6 +14,8 @@
 
 from __future__ import annotations
 
+from typing import Annotated
+
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field, field_validator
 
@@ -26,6 +28,16 @@ from backend.modules.psychometric import (
 )
 
 router = APIRouter(tags=["Psychometric"])
+MERCHANT_ID_PATTERN = r"^\d{10}$"
+MerchantId = Annotated[
+    str,
+    Field(
+        ...,
+        pattern=MERCHANT_ID_PATTERN,
+        description="10-digit numeric merchant identifier.",
+        examples=["9800000000"],
+    ),
+]
 
 
 # ---------------------------------------------------------------------------
@@ -38,11 +50,7 @@ router = APIRouter(tags=["Psychometric"])
 # --- Request bodies ----------------------------------------------------------
 
 class StartSessionRequest(BaseModel):
-    merchant_id: str = Field(
-        ...,
-        description="UUID of the merchant being assessed.",
-        examples=["00000000-0000-0000-0000-000000000001"],
-    )
+    merchant_id: MerchantId
 
 
 class SubmitAnswersRequest(BaseModel):
@@ -80,14 +88,14 @@ class SafeQuestion(BaseModel):
 
 class StartSessionResponse(BaseModel):
     session_id:  str
-    merchant_id: str
+    merchant_id: MerchantId
     created_at:  str
     questions:   list[SafeQuestion]
 
 
 class SessionStatusResponse(BaseModel):
     session_id:  str
-    merchant_id: str
+    merchant_id: MerchantId
     created_at:  str
     submitted:   bool
     question_ids: list[str]
@@ -96,14 +104,14 @@ class SessionStatusResponse(BaseModel):
 class TraitBreakdownResponse(BaseModel):
     raw:        int
     max:        int
-    normalized: float
-    weighted:   float
+    normalized: int
+    weighted:   int
 
 
 class ScoreResponse(BaseModel):
     session_id:  str
-    merchant_id: str
-    psych_score: float
+    merchant_id: MerchantId
+    psych_score: int
     breakdown:   dict[str, TraitBreakdownResponse]
     answers:     dict[str, str]
     scored_at:   str
@@ -177,7 +185,7 @@ def start_session(body: StartSessionRequest) -> StartSessionResponse:
     """
     POST /psych/session/start
 
-    Request body:  { "merchant_id": "<uuid>" }
+    Request body:  { "merchant_id": "<10-digit ID>" }
     Response:      session_id, created_at, 5 stripped questions
     """
     try:
@@ -233,7 +241,7 @@ def retrieve_session(session_id: str) -> SessionStatusResponse:
     summary="Submit answers and receive the psychometric score",
     description=(
         "Accepts the merchant's answers and runs the Weighted Additive Model "
-        "scoring algorithm. Returns the composite psych_score in [0.0, 1.0] "
+        "scoring algorithm. Returns the composite psych_score in [0, 1000] "
         "and a full per-trait breakdown. Each session may only be submitted once."
     ),
 )
@@ -247,7 +255,7 @@ def submit_answers(
     Request body:  { "answers": { "<question_id>": "<option_id>", ... } }
     Response:      psych_score, per-trait breakdown, echoed answers, timestamp
 
-    The psych_score float is the value Person C's fusion.py should consume
+    The psych_score integer is the value Person C's fusion.py should consume
     when computing the final trust score for this merchant.
     """
     try:
