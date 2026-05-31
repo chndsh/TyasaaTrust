@@ -8,8 +8,8 @@
 #   quiz_current_index   int   — which question we are on (0–4)
 #   quiz_answers         dict  — {question_id: option_id} accumulated answers
 #   quiz_result          dict  — ScoreResult returned after submission
-#   quiz_merchant_id     str   — merchant UUID (passed in via query param or set here)
-#   quiz_state           str   — "intro" | "question" | "submitting" | "result" | "error"
+#   quiz_merchant_id     str   — 10-digit merchant ID (passed in via query param or set here)
+#   quiz_state           str   — "intro" | "question" | "submitting" | "complete" | "error"
 #   quiz_error_msg       str   — human-readable error for the error state
 
 import os
@@ -25,6 +25,7 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 import time
+import re
 
 import httpx
 import streamlit as st
@@ -35,6 +36,8 @@ import streamlit as st
 
 API_URL         = os.getenv("API_URL", "http://localhost:8000")
 REQUEST_TIMEOUT = 10  # seconds
+MERCHANT_ID_PATTERN = re.compile(r"^\d{10}$")
+DEFAULT_MERCHANT_ID = "9800000000"
 
 st.set_page_config(
     page_title="Trust Assessment — TyasaaTrust",
@@ -56,68 +59,66 @@ st.set_page_config(
 
 STYLES = """
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,800;1,600&family=Lora:ital,wght@0,400;0,500;1,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@600;700&family=Inter:wght@400;500&display=swap');
 
-/* ── Reset Streamlit chrome ── */
+:root {
+    --bg: #121416;
+    --card: #1A1D20;
+    --accent: #60B224;
+    --text-primary: #FFFFFF;
+    --text-secondary: #A0A5AB;
+    --border: #2A2F35;
+}
+
 #MainMenu, footer, header { visibility: hidden; }
 .block-container {
     padding-top: 2rem !important;
     padding-bottom: 4rem !important;
-    max-width: 740px !important;
+    max-width: 840px !important;
 }
 
-/* ── Page background — aged parchment with subtle grain ── */
 .stApp {
-    background-color: #f5ead8;
-    background-image:
-        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='400' height='400' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+    background-color: var(--bg);
+    color: var(--text-primary);
 }
 
-/* ── Typography base ── */
 html, body, [class*="css"] {
-    font-family: 'Lora', Georgia, serif !important;
-    color: #1a1208;
+    font-family: 'Inter', sans-serif !important;
+    color: var(--text-primary);
 }
 
-/* ── Page header / brand mark ── */
 .brand-mark {
     text-align: center;
     margin-bottom: 0.25rem;
-    letter-spacing: 0.18em;
-    font-family: 'Lora', serif;
+    letter-spacing: 0.28em;
     font-size: 0.7rem;
-    color: #8b7355;
+    color: var(--text-secondary);
     text-transform: uppercase;
+    font-weight: 500;
 }
 
 .page-title {
-    font-family: 'Playfair Display', Georgia, serif;
+    font-family: 'Plus Jakarta Sans', sans-serif;
     font-size: 2rem;
-    font-weight: 800;
+    font-weight: 700;
     text-align: center;
-    color: #1a1208;
-    margin: 0 0 0.1rem 0;
-    line-height: 1.2;
+    margin: 0 0 0.2rem 0;
 }
 
 .page-subtitle {
-    font-family: 'Lora', serif;
-    font-style: italic;
     font-size: 0.95rem;
     text-align: center;
-    color: #6b5740;
-    margin-bottom: 2rem;
+    color: var(--text-secondary);
+    margin-bottom: 1.8rem;
 }
 
-/* ── Divider ── */
 .ink-rule {
     border: none;
-    border-top: 1.5px solid #c4a882;
-    margin: 1.5rem auto;
+    border-top: 1px solid var(--border);
+    margin: 1.3rem auto 1.8rem;
     width: 80%;
 }
 
-/* ── Progress tally ── */
 .tally-bar {
     display: flex;
     justify-content: center;
@@ -128,96 +129,75 @@ html, body, [class*="css"] {
     width: 28px;
     height: 28px;
     border-radius: 50%;
-    border: 1.5px solid #c4a882;
+    border: 1px solid var(--border);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-family: 'Lora', serif;
     font-size: 0.7rem;
-    color: #8b7355;
+    color: var(--text-secondary);
     background: transparent;
     transition: all 0.4s ease;
 }
 .tally-mark.done {
-    background: #4a7c6f;
-    border-color: #4a7c6f;
-    color: #f5ead8;
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #0d0f12;
 }
 .tally-mark.current {
-    background: #c0392b;
-    border-color: #c0392b;
-    color: #f5ead8;
-    box-shadow: 0 0 0 3px rgba(192,57,43,0.18);
+    background: #0d0f12;
+    border-color: var(--accent);
+    color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(96,178,36,0.15);
 }
 
-/* ── Scenario card ── */
 .scenario-card {
-    background: #fdf6e8;
-    border: 1px solid #d4bc96;
-    border-left: 4px solid #c0392b;
-    border-radius: 2px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 10px;
     padding: 1.6rem 1.8rem;
     margin-bottom: 1.6rem;
-    box-shadow: 3px 4px 12px rgba(26,18,8,0.08);
+    box-shadow: 0 12px 30px rgba(0,0,0,0.25);
     animation: fadeSlideIn 0.5s ease forwards;
-    position: relative;
 }
-.scenario-card::before {
-    content: "\\201C";
-    font-family: 'Playfair Display', serif;
-    font-size: 4rem;
-    color: #e8d5b8;
-    position: absolute;
-    top: -0.5rem;
-    left: 0.8rem;
-    line-height: 1;
-}
+
 .scenario-label {
-    font-family: 'Lora', serif;
     font-size: 0.65rem;
     letter-spacing: 0.2em;
     text-transform: uppercase;
-    color: #c0392b;
+    color: var(--accent);
     margin-bottom: 0.7rem;
     font-weight: 500;
 }
+
 .scenario-text {
-    font-family: 'Lora', serif;
     font-size: 1.05rem;
-    line-height: 1.75;
-    color: #2c1f0e;
-    font-style: italic;
+    line-height: 1.7;
+    color: var(--text-primary);
 }
 
-/* ── Choice prompt ── */
 .choice-prompt {
-    font-family: 'Playfair Display', serif;
+    font-family: 'Plus Jakarta Sans', sans-serif;
     font-size: 0.9rem;
     font-weight: 600;
-    color: #5a3e28;
+    color: var(--text-secondary);
     margin-bottom: 0.9rem;
     letter-spacing: 0.02em;
 }
 
-/* ── Radio widget restyled as clickable option cards ──
-   Target the outer div wrapping each radio item and make
-   the entire label surface into a bordered card.           */
-
-/* Container: stack cards vertically with no extra gap */
 div[data-testid="stRadio"] > div {
     display: flex !important;
     flex-direction: column !important;
     gap: 0.55rem !important;
 }
 
-/* Each radio item wrapper */
 div[data-testid="stRadio"] > div > label {
     display: flex !important;
     align-items: flex-start !important;
     gap: 0.85rem !important;
-    background: #fdf6e8 !important;
-    border: 1.5px solid #d4bc96 !important;
-    border-radius: 2px !important;
+    background: var(--card) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 10px !important;
     padding: 0.85rem 1.1rem !important;
     cursor: pointer !important;
     transition: border-color 0.2s ease, background 0.2s ease,
@@ -227,183 +207,109 @@ div[data-testid="stRadio"] > div > label {
 }
 
 div[data-testid="stRadio"] > div > label:hover {
-    border-color: #c0392b !important;
-    background: #fef9f0 !important;
+    border-color: var(--accent) !important;
+    background: #1f2428 !important;
     transform: translateX(3px) !important;
-    box-shadow: 2px 3px 8px rgba(192,57,43,0.1) !important;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.2) !important;
 }
 
-/* Hide the native radio circle — the card border IS the selector */
 div[data-testid="stRadio"] > div > label > div:first-child {
     display: none !important;
 }
 
-/* The text span inside the label */
 div[data-testid="stRadio"] > div > label > div > p,
 div[data-testid="stRadio"] > div > label p {
-    font-family: 'Lora', serif !important;
     font-size: 0.95rem !important;
     line-height: 1.6 !important;
-    color: #2c1f0e !important;
+    color: var(--text-primary) !important;
     margin: 0 !important;
 }
 
-/* Selected state — vermillion left border + tinted background */
 div[data-testid="stRadio"] > div > label:has(input:checked) {
-    border-color: #c0392b !important;
-    border-left-width: 4px !important;
-    background: #fef3ee !important;
-    box-shadow: 2px 3px 10px rgba(192,57,43,0.12) !important;
+    border-color: var(--accent) !important;
+    background: #1f2420 !important;
+    box-shadow: 0 6px 18px rgba(96,178,36,0.15) !important;
 }
 
 div[data-testid="stRadio"] > div > label:has(input:checked) p {
-    color: #1a1208 !important;
+    color: var(--text-primary) !important;
     font-weight: 500 !important;
 }
 
-/* ── Navigation buttons ── */
+div[data-testid="stTextInput"] input {
+    background: var(--card) !important;
+    color: var(--text-primary) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 8px !important;
+}
+div[data-testid="stTextInput"] input:focus {
+    border-color: var(--accent) !important;
+    box-shadow: 0 0 0 2px rgba(96,178,36,0.2) !important;
+}
+
 .stButton > button {
-    font-family: 'Lora', serif !important;
+    font-family: 'Inter', sans-serif !important;
     font-size: 0.9rem !important;
-    background: #1a1208 !important;
-    color: #f5ead8 !important;
+    background: var(--accent) !important;
+    color: #0d0f12 !important;
     border: none !important;
-    border-radius: 2px !important;
+    border-radius: 10px !important;
     padding: 0.6rem 1.8rem !important;
-    letter-spacing: 0.08em !important;
+    letter-spacing: 0.04em !important;
     transition: all 0.2s ease !important;
 }
 .stButton > button:hover {
-    background: #c0392b !important;
+    background: #74c63e !important;
     transform: translateY(-1px) !important;
-    box-shadow: 0 4px 12px rgba(192,57,43,0.25) !important;
+    box-shadow: 0 8px 18px rgba(96,178,36,0.3) !important;
 }
 .stButton > button:disabled {
-    background: #c4a882 !important;
-    color: #f5ead8 !important;
+    background: #2d3438 !important;
+    color: var(--text-secondary) !important;
     cursor: not-allowed !important;
 }
 
-
-
-/* ── Result page ── */
 .result-header {
-    font-family: 'Playfair Display', serif;
+    font-family: 'Plus Jakarta Sans', sans-serif;
     font-size: 1.7rem;
-    font-weight: 800;
+    font-weight: 700;
     text-align: center;
-    color: #1a1208;
+    color: var(--text-primary);
     margin-bottom: 0.3rem;
 }
-.result-score-ring {
+.result-subtitle {
     text-align: center;
-    margin: 1.2rem 0;
-}
-.score-number {
-    font-family: 'Playfair Display', serif;
-    font-size: 4rem;
-    font-weight: 800;
-    color: #1a1208;
-    line-height: 1;
-}
-.score-denom {
-    font-family: 'Lora', serif;
-    font-size: 1rem;
-    color: #8b7355;
-}
-.score-label {
-    font-family: 'Lora', serif;
-    font-style: italic;
-    font-size: 0.85rem;
-    color: #6b5740;
-    margin-top: 0.2rem;
-}
-.trait-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.65rem 0;
-    border-bottom: 1px solid #e8d5b8;
-}
-.trait-name {
-    font-family: 'Lora', serif;
-    font-size: 0.9rem;
-    color: #2c1f0e;
-    font-weight: 500;
-    text-transform: capitalize;
-    min-width: 160px;
-}
-.trait-bar-wrap {
-    flex: 1;
-    height: 6px;
-    background: #e8d5b8;
-    border-radius: 3px;
-    margin: 0 1rem;
-    overflow: hidden;
-}
-.trait-bar-fill {
-    height: 100%;
-    border-radius: 3px;
-    background: #4a7c6f;
-    transition: width 1s ease;
-}
-.trait-pct {
-    font-family: 'Playfair Display', serif;
-    font-size: 0.85rem;
-    font-weight: 600;
-    color: #1a1208;
-    min-width: 38px;
-    text-align: right;
+    color: var(--text-secondary);
+    font-size: 0.95rem;
 }
 
-/* ── Verdict badge ── */
-.verdict-badge {
-    display: inline-block;
-    padding: 0.35rem 1rem;
-    border-radius: 2px;
-    font-family: 'Lora', serif;
-    font-size: 0.8rem;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    font-weight: 500;
-    margin-top: 0.4rem;
-}
-.verdict-high   { background:#d4edda; color:#155724; border:1px solid #b8dac0; }
-.verdict-mid    { background:#fff3cd; color:#856404; border:1px solid #ffe08a; }
-.verdict-low    { background:#f8d7da; color:#721c24; border:1px solid #f1aeb5; }
-
-/* ── Intro card ── */
 .intro-card {
-    background: #fdf6e8;
-    border: 1px solid #d4bc96;
-    border-radius: 2px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
     padding: 1.6rem 1.8rem;
     margin: 1rem 0 1.5rem 0;
-    box-shadow: 3px 4px 12px rgba(26,18,8,0.06);
+    box-shadow: 0 12px 24px rgba(0,0,0,0.2);
 }
 .intro-card p {
-    font-family: 'Lora', serif;
     font-size: 0.97rem;
-    line-height: 1.75;
-    color: #2c1f0e;
+    line-height: 1.7;
+    color: var(--text-primary);
     margin: 0;
 }
 
-/* ── Animations ── */
 @keyframes fadeSlideIn {
     from { opacity: 0; transform: translateY(10px); }
     to   { opacity: 1; transform: translateY(0);    }
 }
 
-/* ── Error box ── */
 .error-box {
-    background: #f8d7da;
-    border: 1px solid #f1aeb5;
-    border-radius: 2px;
+    background: #2a1518;
+    border: 1px solid #5f2b2f;
+    border-radius: 10px;
     padding: 1rem 1.2rem;
-    font-family: 'Lora', serif;
     font-size: 0.92rem;
-    color: #721c24;
+    color: #f3b9bf;
     margin: 1rem 0;
 }
 </style>
@@ -440,6 +346,14 @@ def api_submit_answers(session_id: str, answers: dict[str, str]) -> dict:
 # ---------------------------------------------------------------------------
 
 def _init_state() -> None:
+    seed_merchant_id = st.session_state.get("merchant_id")
+    if not seed_merchant_id or not MERCHANT_ID_PATTERN.match(seed_merchant_id):
+        query_merchant_id = st.query_params.get("merchant_id", "")
+        seed_merchant_id = (
+            query_merchant_id
+            if MERCHANT_ID_PATTERN.match(query_merchant_id)
+            else DEFAULT_MERCHANT_ID
+        )
     defaults = {
         "quiz_state":         "intro",
         "quiz_session_id":    None,
@@ -448,7 +362,7 @@ def _init_state() -> None:
         "quiz_answers":       {},
         "quiz_result":        None,
         "quiz_error_msg":     "",
-        "quiz_merchant_id":   st.query_params.get("merchant_id", "demo-merchant-001"),
+        "quiz_merchant_id":   seed_merchant_id,
         "quiz_selected":      None,   # holds radio selection for current question
     }
     for key, val in defaults.items():
@@ -463,9 +377,12 @@ _init_state()
 # ---------------------------------------------------------------------------
 
 def render_header() -> None:
-    st.markdown('<p class="brand-mark">TyasaaTrust · Merchant Assessment</p>', unsafe_allow_html=True)
-    st.markdown('<h1 class="page-title">व्यापारी परीक्षण</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="page-subtitle">A psychometric assessment for Nepali merchants</p>', unsafe_allow_html=True)
+    st.markdown('<p class="brand-mark">TyasaaTrust · Psychometric Analysis</p>', unsafe_allow_html=True)
+    st.markdown('<h1 class="page-title">Psychometric Trust Assessment</h1>', unsafe_allow_html=True)
+    st.markdown(
+        '<p class="page-subtitle">Complete the five-question assessment to unlock your trust profile.</p>',
+        unsafe_allow_html=True,
+    )
     st.markdown('<hr class="ink-rule"/>', unsafe_allow_html=True)
 
 
@@ -523,6 +440,13 @@ def render_intro() -> None:
 
 def _start_session() -> None:
     merchant_id = st.session_state.quiz_merchant_id
+    if not MERCHANT_ID_PATTERN.match(merchant_id):
+        st.session_state.quiz_error_msg = (
+            "Merchant ID must be a 10-digit numeric value. "
+            "Please return to the landing page and correct it."
+        )
+        st.session_state.quiz_state = "error"
+        st.rerun()
     try:
         with st.spinner("Preparing your assessment…"):
             data = api_start_session(merchant_id)
@@ -669,7 +593,9 @@ def render_submitting() -> None:
     try:
         result = api_submit_answers(session_id, answers)
         st.session_state.quiz_result = result
-        st.session_state.quiz_state  = "result"
+        st.session_state.quiz_state  = "complete"
+        st.session_state.quiz_completed = True
+        st.session_state.merchant_id = result.get("merchant_id")
         st.rerun()
     except httpx.HTTPStatusError as e:
         detail = e.response.json().get("detail", str(e))
@@ -688,111 +614,20 @@ def render_submitting() -> None:
 # State: RESULT
 # ---------------------------------------------------------------------------
 
-TRAIT_DISPLAY_NAMES = {
-    "integrity":            "Integrity",
-    "financial_discipline": "Financial Discipline",
-    "resilience":           "Resilience",
-}
-
-def _verdict(score: float) -> tuple[str, str]:
-    """Return (label, css_class) based on composite score."""
-    if score >= 0.70:
-        return "Strong Trust Profile",  "verdict-high"
-    if score >= 0.45:
-        return "Developing Trust Profile", "verdict-mid"
-    return "Needs Improvement", "verdict-low"
-
-
-def render_result() -> None:
+def render_complete() -> None:
     render_header()
 
-    result      = st.session_state.quiz_result
-    psych_score = result["psych_score"]
-    breakdown   = result["breakdown"]
-
-    score_pct   = round(psych_score * 100, 1)
-    verdict_lbl, verdict_cls = _verdict(psych_score)
-
-    # ── Score ring ──
     st.markdown(
-        f"""
-        <div class="result-score-ring">
-            <p class="result-header">Assessment Complete</p>
-            <div style="margin:1rem 0;">
-                <span class="score-number">{score_pct}</span>
-                <span class="score-denom"> / 100</span>
-            </div>
-            <div>
-                <span class="verdict-badge {verdict_cls}">{verdict_lbl}</span>
-            </div>
-            <p class="score-label" style="margin-top:0.6rem;">
-                Psychometric Trust Score
-            </p>
+        """
+        <div class="intro-card">
+            <p class="result-header">Thank you for completing the assessment.</p>
+            <p class="result-subtitle">Your responses are saved. Redirecting you to the main console…</p>
         </div>
         """,
         unsafe_allow_html=True,
     )
-
-    st.markdown('<hr class="ink-rule"/>', unsafe_allow_html=True)
-
-    # ── Trait breakdown ──
-    st.markdown(
-        '<p style="font-family:\'Playfair Display\',serif; font-weight:600; '
-        'font-size:0.95rem; color:#5a3e28; margin-bottom:0.4rem; '
-        'letter-spacing:0.04em;">Trait Breakdown</p>',
-        unsafe_allow_html=True,
-    )
-
-    for trait_key, bd in breakdown.items():
-        display_name = TRAIT_DISPLAY_NAMES.get(trait_key, trait_key.replace("_", " ").title())
-        pct          = round(bd["normalized"] * 100)
-        bar_color    = (
-            "#4a7c6f" if pct >= 70
-            else "#c0392b" if pct < 45
-            else "#c49a3c"
-        )
-
-        st.markdown(
-            f"""
-            <div class="trait-row">
-                <span class="trait-name">{display_name}</span>
-                <div class="trait-bar-wrap">
-                    <div class="trait-bar-fill"
-                         style="width:{pct}%; background:{bar_color};"></div>
-                </div>
-                <span class="trait-pct">{pct}%</span>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    st.markdown('<hr class="ink-rule"/>', unsafe_allow_html=True)
-
-    # ── Session metadata (useful for judges / debugging) ──
-    with st.expander("Session details", expanded=False):
-        st.markdown(
-            f"""
-            <div style="font-family:'Lora',serif; font-size:0.82rem;
-                        color:#6b5740; line-height:1.8;">
-                <strong>Session ID:</strong> {result['session_id']}<br/>
-                <strong>Merchant ID:</strong> {result['merchant_id']}<br/>
-                <strong>Scored at:</strong> {result['scored_at']}<br/>
-                <strong>Raw psych_score:</strong> {result['psych_score']}
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    st.markdown("<br/>", unsafe_allow_html=True)
-
-    # ── Retake / home buttons ──
-    col1, col2, col3 = st.columns([1, 1, 1])
-    with col1:
-        if st.button("Retake Assessment", use_container_width=True):
-            _reset_quiz()
-    with col3:
-        if st.button("← Dashboard", use_container_width=True):
-            st.switch_page("pages/4_dashboard.py")
+    time.sleep(1.2)
+    st.switch_page("app.py")
 
 
 def _reset_quiz() -> None:
@@ -834,7 +669,7 @@ STATE_RENDERERS = {
     "intro":       render_intro,
     "question":    render_question,
     "submitting":  render_submitting,
-    "result":      render_result,
+    "complete":    render_complete,
     "error":       render_error,
 }
 

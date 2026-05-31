@@ -191,6 +191,15 @@ module and router as your feature matures.
 
 ---
 
+## Global validation & scoring standards
+
+- **Merchant IDs** must be **10-digit numeric strings** across all APIs and UI inputs.
+- **All trust scores** are **integers in the range 0–1000** (including module outputs and API payloads).
+- **Composite scoring weights**: Community Vouch Trust 50%, Digital Footprint 30%, Psychometric Profile 20%.
+- Default demo Merchant ID: `9800000000`.
+
+---
+
 ## Branch and Git workflow
 
 You each work on your own branch. Never push directly to `main`.
@@ -377,7 +386,7 @@ docker compose ps
 # 5. Hit the full scoring endpoint
 python -c "
 import httpx
-r = httpx.get('http://localhost:8000/scores/00000000-0000-0000-0000-000000000001')
+r = httpx.get('http://localhost:8000/scores/9800000000')
 import json; print(json.dumps(r.json(), indent=2))
 "
 

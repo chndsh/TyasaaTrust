@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import os
 import random
+import re
 import uuid
 from collections import defaultdict
 from datetime import datetime, timezone
@@ -40,9 +41,17 @@ TRAIT_WEIGHTS: dict[str, float] = {
 QUESTIONS_PER_SESSION:      int = 5
 MAX_POINTS_PER_TRAIT_PER_Q: int = 4
 MAX_RAW_PER_TRAIT:          int = MAX_POINTS_PER_TRAIT_PER_Q * QUESTIONS_PER_SESSION  # 20
+SCORE_SCALE:                int = 1000
 
 SESSION_TTL_SECONDS: int = int(os.getenv("PSYCH_SESSION_TTL", "3600"))
 REDIS_KEY_PREFIX:    str = "psych:session:"
+LATEST_SCORE_KEY_PREFIX: str = "psych:latest:"
+MERCHANT_ID_PATTERN = re.compile(r"^\d{10}$")
+
+
+def _validate_merchant_id(merchant_id: str) -> None:
+    if not MERCHANT_ID_PATTERN.match(merchant_id):
+        raise ValueError("merchant_id must be a 10-digit numeric string.")
 
 # ---------------------------------------------------------------------------
 # Redis connection
@@ -104,14 +113,14 @@ class SessionState(TypedDict):
 class TraitBreakdown(TypedDict):
     raw:        int
     max:        int
-    normalized: float
-    weighted:   float
+    normalized: int
+    weighted:   int
 
 
 class ScoreResult(TypedDict):
     session_id:  str
     merchant_id: str
-    psych_score: float
+    psych_score: int
     breakdown:   dict[str, TraitBreakdown]
     answers:     dict[str, str]
     scored_at:   str
@@ -129,6 +138,10 @@ def _redis_key(session_id: str) -> str:
     return f"{REDIS_KEY_PREFIX}{session_id}"
 
 
+def _latest_score_key(merchant_id: str) -> str:
+    return f"{LATEST_SCORE_KEY_PREFIX}{merchant_id}"
+
+
 def _write_session(state: SessionState, ttl: int = SESSION_TTL_SECONDS) -> None:
     """
     Persist a SessionState to Redis as a JSON string with a TTL.
@@ -141,6 +154,26 @@ def _write_session(state: SessionState, ttl: int = SESSION_TTL_SECONDS) -> None:
         name=_redis_key(state["session_id"]),
         time=ttl,
         value=json.dumps(state),
+    )
+
+
+def _write_latest_score(
+    merchant_id: str,
+    psych_score: int,
+    scored_at: str,
+    ttl: int = SESSION_TTL_SECONDS,
+) -> None:
+    client = _get_redis()
+    payload = {
+        "merchant_id": merchant_id,
+        "psych_score": psych_score,
+        "scored_at": scored_at,
+        "status": "stored",
+    }
+    client.setex(
+        name=_latest_score_key(merchant_id),
+        time=ttl,
+        value=json.dumps(payload),
     )
 
 
@@ -247,6 +280,7 @@ def create_session(merchant_id: str) -> SessionState:
     The router is responsible for stripping option weight vectors before
     sending questions to the client. Weights must never be exposed over HTTP.
     """
+    _validate_merchant_id(merchant_id)
     session_id = str(uuid.uuid4())
     questions  = _sample_questions(QUESTION_BANK)
 
@@ -261,6 +295,24 @@ def create_session(merchant_id: str) -> SessionState:
 
     _write_session(state)
     return state
+
+
+def get_psychometric_score(merchant_id: str) -> dict[str, int | str]:
+    """
+    Retrieve the latest psychometric score for a merchant.
+
+    Returns a stubbed score if no completed session has been stored yet.
+    """
+    _validate_merchant_id(merchant_id)
+    client = _get_redis()
+    raw = client.get(_latest_score_key(merchant_id))
+    if raw is None:
+        return {
+            "merchant_id": merchant_id,
+            "psych_score": 620,
+            "status": "stub",
+        }
+    return json.loads(raw)
 
 
 def get_session(session_id: str) -> SessionState:
@@ -292,7 +344,7 @@ def score_session(
     Returns
     -------
     ScoreResult
-        Composite psych_score in [0.0, 1.0], per-trait breakdown,
+        Composite psych_score in [0, 1000], per-trait breakdown,
         echoed answers, and a UTC timestamp.
 
     Raises
@@ -343,25 +395,27 @@ def score_session(
     # --- Build per-trait breakdown --------------------------------------------
     breakdown: dict[str, TraitBreakdown] = {}
     for trait, raw in raw_scores.items():
-        normalized = raw / MAX_RAW_PER_TRAIT
-        weighted   = normalized * TRAIT_WEIGHTS[trait]
+        normalized = int(round((raw / MAX_RAW_PER_TRAIT) * SCORE_SCALE))
+        weighted   = int(round(normalized * TRAIT_WEIGHTS[trait]))
         breakdown[trait] = {
-            "raw":        raw,
-            "max":        MAX_RAW_PER_TRAIT,
-            "normalized": round(normalized, 4),
-            "weighted":   round(weighted,   4),
+            "raw":        normalized,
+            "max":        SCORE_SCALE,
+            "normalized": normalized,
+            "weighted":   weighted,
         }
 
     # --- Composite score -----------------------------------------------------
-    psych_score = round(
-        sum(t["weighted"] for t in breakdown.values()), 4
-    )
+    psych_score = int(round(sum(t["weighted"] for t in breakdown.values())))
+    psych_score = max(0, min(psych_score, SCORE_SCALE))
 
     # --- Mark submitted and persist back to Redis ----------------------------
     # We update rather than delete so the record survives for audit/debugging
     # during the hackathon demo window. In production, delete after scoring.
     state["submitted"] = True
     _write_session(state, ttl=SESSION_TTL_SECONDS)
+
+    scored_at = datetime.now(timezone.utc).isoformat()
+    _write_latest_score(state["merchant_id"], psych_score, scored_at)
 
     return {
         "session_id":  session_id,

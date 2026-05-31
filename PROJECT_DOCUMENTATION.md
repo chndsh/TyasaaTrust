@@ -25,6 +25,14 @@
 
 ---
 
+## Global Architecture & Validation Constraints
+
+- **Merchant ID format:** strict 10-digit numeric string across all APIs, modules, and UI inputs.
+- **Score normalization:** all component and composite scores are integers in the **0–1000** range.
+- **Fusion weights:** Community Vouch Trust 50%, Digital Footprint 30%, Psychometric Profile 20%.
+
+---
+
 ## Technology Stack
 
 ### Backend
@@ -74,7 +82,7 @@ TyasaaTrust/
 │   │
 │   ├── routers/                 # API endpoint handlers
 │   │   ├── graph.py             # Social graph endpoint (GET /graph/{merchant_id})
-│   │   ├── psych.py             # Psychometric endpoints (POST /psych/submit, GET /psych/questions)
+│   │   ├── psych.py             # Psychometric session endpoints (/psych/session/*)
 │   │   ├── ingest.py            # Data ingestion endpoint (POST /ingest/digital-footprint)
 │   │   └── scoring.py           # Composite scoring endpoint (GET /scores/{merchant_id})
 │   │
@@ -163,8 +171,9 @@ Template for environment configuration (copy to `.env`):
 ```python
 get_social_graph_score(merchant_id: str) -> dict
 ```
-- Returns stub score (0.62) with social connection signals
-- Tracks: connection count (18), community score (0.7)
+- Returns stub score (620) with social connection signals
+- Tracks: connection count (18), community score (700)
+- All module scores are integers in the 0–1000 range
 - Ready for graph algorithm replacement (PageRank, centrality measures)
 
 **Dependencies:** NetworkX (for future graph traversal)
@@ -174,14 +183,14 @@ get_social_graph_score(merchant_id: str) -> dict
 **Ownership:** Person B  
 **Functions:**
 ```python
-score_responses(responses: list[dict]) -> dict
+create_session(merchant_id: str) -> SessionState
+score_session(session_id: str, answers: dict[str, str]) -> ScoreResult
 get_psychometric_score(merchant_id: str) -> dict
 ```
-- `score_responses`: Computes personality traits from quiz answers
-  - Scoring logic: Base 0.4 + 0.05 per response (capped at 0.95)
-  - Returns: Traits (openness, conscientiousness) and summary
-- `get_psychometric_score`: Retrieves stored psychometric profile
-- Traits tracked: openness (0.6), conscientiousness (0.55)
+- `create_session`: Starts a new 5-question session for a 10-digit merchant ID
+- `score_session`: Scores submitted answers and returns an integer psych score (0–1000)
+- `get_psychometric_score`: Returns the latest stored psych score (or stub) for fusion
+- Trait weights are blended into a single composite, normalized to 0–1000
 
 **Dependencies:** Quiz data from `backend/data/questions.py`
 
@@ -194,8 +203,8 @@ get_behavioral_score(merchant_id: str) -> dict
 summarize_digital_footprint(events: list[dict]) -> dict
 ```
 - `get_behavioral_score`: Aggregates behavior signals
-  - Tracks: review sentiment (0.63), chargeback rate (0.04)
-  - Base score: 0.6
+  - Tracks: review sentiment (630), chargeback rate (40)
+  - Base score: 600
 - `summarize_digital_footprint`: Processes transaction/event stream
   - Counts events and generates summary
 
@@ -208,7 +217,7 @@ summarize_digital_footprint(events: list[dict]) -> dict
 ```python
 combine_scores(merchant_id: str, social: dict, psych: dict, behavioral: dict) -> dict
 ```
-- Averages three sub-scores: (social + psych + behavioral) / 3
+- Weighted fusion: (Community Vouch Trust * 50%) + (Digital Footprint * 30%) + (Psychometric Profile * 20%)
 - Returns comprehensive scoring object with all components
 - Enables transparency into score composition
 
@@ -230,17 +239,28 @@ Returns: Social score, connection signals, community metrics
 **Ownership:** Person B  
 **Endpoints:**
 ```
-GET /psych/questions      # Fetch quiz questions
-POST /psych/submit        # Submit quiz responses and get scoring
+POST /psych/session/start                # Create session and return 5 questions
+GET  /psych/session/{session_id}         # Retrieve session status
+POST /psych/session/{session_id}/submit  # Submit answers and get scoring
 ```
 
-**Request Schema (POST /psych/submit):**
+**Request Schema (POST /psych/session/start):**
 ```json
 {
-  "merchant_id": "string",
-  "responses": [
-    {"question": "str", "answer": "str", "trait": "str"}
-  ]
+  "merchant_id": "9800000000"
+}
+```
+
+**Request Schema (POST /psych/session/{session_id}/submit):**
+```json
+{
+  "answers": {
+    "Q03": "B",
+    "Q07": "A",
+    "Q11": "C",
+    "Q14": "B",
+    "Q18": "D"
+  }
 }
 ```
 
@@ -255,7 +275,7 @@ POST /ingest/digital-footprint
 **Request Schema:**
 ```json
 {
-  "merchant_id": "string",
+  "merchant_id": "9800000000",
   "events": [{"type": "transaction", "value": 100}, ...]
 }
 ```
@@ -273,15 +293,16 @@ POST /ingest/digital-footprint
 **Ownership:** Person C  
 **Endpoints:**
 ```
-GET /scores/{merchant_id}
+GET  /scores/{merchant_id}
+POST /scores/score              # optional direct session scoring
 ```
 
 **Workflow:**
 1. Calls `get_social_graph_score(merchant_id)`
 2. Calls `get_psychometric_score(merchant_id)`
 3. Calls `get_behavioral_score(merchant_id)`
-4. Passes all three to `combine_scores()` for fusion
-5. Returns aggregated result with all component scores
+4. Passes all three to `combine_scores()` for weighted fusion
+5. Returns aggregated result with all component scores (0–1000)
 
 ---
 
@@ -332,10 +353,10 @@ QUESTIONS = [
 #### `frontend/app.py`
 **Purpose:** Streamlit home page and navigation hub  
 **Functionality:**
-- Sets page config (title, layout)
-- Displays welcome message
-- Shows backend API URL for debugging
-- Sidebar automatically links to numbered pages (2_*, 3_*, 4_*)
+- Enforces 10-digit Merchant ID input
+- Reveals CTA to launch the psychometric assessment once ID is valid
+- After completion, fetches and displays all component scores (0–1000)
+- Premium dark-mode layout with bordered card containers
 
 **Output:** http://localhost:8501 (after `streamlit run app.py --server.port 8501`)
 
@@ -343,7 +364,7 @@ QUESTIONS = [
 **Purpose:** Social graph visualization and exploration  
 **Ownership:** Person A  
 **UI Components:**
-- Text input for merchant_id
+- Text input for 10-digit merchant_id
 - Button to fetch social score
 - JSON display of response
 
@@ -358,11 +379,11 @@ GET {API_URL}/graph/{merchant_id}
 **Purpose:** Interactive psychometric quiz interface  
 **Ownership:** Person B  
 **Workflow:**
-1. Fetches question list from `GET /psych/questions`
-2. Renders radio buttons for each question
+1. Starts a session via `POST /psych/session/start`
+2. Renders five questions with radio options
 3. Collects user responses
-4. On submit: POSTs to `/psych/submit` with merchant_id and responses
-5. Displays scoring results (traits, summary)
+4. On submit: POSTs to `/psych/session/{session_id}/submit`
+5. Shows a thank-you completion screen and redirects to landing page
 
 **State Management:** Uses Streamlit's session state for form persistence
 
@@ -370,10 +391,10 @@ GET {API_URL}/graph/{merchant_id}
 **Purpose:** Composite trust score dashboard and metrics  
 **Ownership:** Person C  
 **Functionality:**
-- Text input for merchant_id
+- Text input for 10-digit merchant_id
 - Refresh button to fetch latest scores
 - Displays four metrics:
-  - Final score (averaged composite)
+  - Final score (weighted composite)
   - Social score component
   - Psych score component
   - Behavioral score component
@@ -397,7 +418,7 @@ GET {API_URL}/scores/{merchant_id}
 │                                                                   │
 │  app.py (hub)                                                    │
 │    ├→ 2_graph_explorer.py → GET /graph/{id}                    │
-│    ├→ 3_quiz.py           → GET/POST /psych/*                  │
+│    ├→ 3_quiz.py           → /psych/session/*                  │
 │    └→ 4_dashboard.py      → GET /scores/{id}                   │
 │                                                                   │
 └─────────────────────────────────────────────────────────────────┘
@@ -422,7 +443,7 @@ GET {API_URL}/scores/{merchant_id}
 │  psychometric.py ──→ [Trait Scoring]   ──→ Psych Score          │
 │  behavioral.py   ──→ [Pattern Analysis] ──→ Behavioral Score   │
 │                              ↓                                    │
-│  fusion.py ──→ [Average Scores] ──→ Final Score (0-1)           │
+│  fusion.py ──→ [Weighted Fusion] ──→ Final Score (0-1000)       │
 │                                                                   │
 └─────────────────────────────────────────────────────────────────┘
          ↓ Data Storage (Optional)
@@ -441,34 +462,34 @@ GET {API_URL}/scores/{merchant_id}
 
 ```
 1. Frontend (4_dashboard.py):
-   GET http://localhost:8000/scores/merchant-demo
+   GET http://localhost:8000/scores/9800000000
    
 2. Backend Router (routers/scoring.py):
-   score_merchant("merchant-demo")
+   score_merchant("9800000000")
    
 3. Orchestration:
-   ├─ Call modules.social_graph.get_social_graph_score("merchant-demo")
-   │  └─ Returns: {"social_score": 0.62, "signals": {...}}
+   ├─ Call modules.social_graph.get_social_graph_score("9800000000")
+   │  └─ Returns: {"social_score": 620, "signals": {...}}
    │
-   ├─ Call modules.psychometric.get_psychometric_score("merchant-demo")
-   │  └─ Returns: {"psych_score": 0.57, "traits": {...}}
+   ├─ Call modules.psychometric.get_psychometric_score("9800000000")
+   │  └─ Returns: {"psych_score": 620, "status": "stub"}
    │
-   ├─ Call modules.behavioral.get_behavioral_score("merchant-demo")
-   │  └─ Returns: {"behavioral_score": 0.6, "signals": {...}}
+   ├─ Call modules.behavioral.get_behavioral_score("9800000000")
+   │  └─ Returns: {"behavioral_score": 600, "signals": {...}}
    │
    └─ Call modules.fusion.combine_scores(
-       "merchant-demo", social, psych, behavioral
+       "9800000000", social, psych, behavioral
      )
-        └─ Computes: (0.62 + 0.57 + 0.6) / 3 = 0.597
+        └─ Computes: (620 * 0.5) + (600 * 0.3) + (620 * 0.2) = 614
         └─ Returns aggregated result
         
 4. HTTP Response (JSON):
    {
-     "merchant_id": "merchant-demo",
-     "final_score": 0.597,
-     "social_score": 0.62,
-     "psych_score": 0.57,
-     "behavioral_score": 0.6,
+     "merchant_id": "9800000000",
+     "final_score": 614,
+     "social_score": 620,
+     "psych_score": 620,
+     "behavioral_score": 600,
      "status": "stub"
    }
 
@@ -482,34 +503,36 @@ GET {API_URL}/scores/{merchant_id}
 
 ```
 1. Frontend (3_quiz.py):
-   - Fetches questions: GET /psych/questions
+   - Starts session: POST /psych/session/start with:
+     { "merchant_id": "9800000000" }
    - User selects answers
-   - POST /psych/submit with:
+   - POST /psych/session/{session_id}/submit with:
      {
-       "merchant_id": "user-123",
-       "responses": [
-         {"question": "...", "answer": "Always", "trait": "conscientiousness"},
-         {"question": "...", "answer": "Very comfortable", "trait": "openness"}
-       ]
+       "answers": {
+         "Q03": "B",
+         "Q07": "A",
+         "Q11": "C",
+         "Q14": "B",
+         "Q18": "D"
+       }
      }
 
 2. Backend Router (routers/psych.py):
-   submit_quiz(QuizSubmission)
+   submit_answers(session_id, answers)
    
 3. Module Logic (modules/psychometric.py):
-   score_responses(submission.responses)
-   - Computes score: 0.4 + (2 * 0.05) = 0.5
-   - Extracts traits: openness, conscientiousness
+   score_session(session_id, answers)
+   - Computes integer psych_score in the 0–1000 range
+   - Persists latest score for fusion
    
 4. Response back to Frontend:
    {
-     "merchant_id": "user-123",
-     "psych_score": 0.5,
-     "traits": {"openness": 0.58, "conscientiousness": 0.62},
-     "summary": "stubbed from response count"
+     "merchant_id": "9800000000",
+     "psych_score": 640,
+     "breakdown": { "...": "..." }
    }
 
-5. Frontend displays results
+5. Frontend displays a thank-you completion state and redirects to landing page
 ```
 
 ---
@@ -630,13 +653,13 @@ cd frontend && streamlit run app.py --server.port 8501
 curl http://localhost:8000/health
 # {"status":"ok"}
 
-curl http://localhost:8000/scores/merchant-123
+curl http://localhost:8000/scores/9800000000
 # {
-#   "merchant_id": "merchant-123",
-#   "final_score": 0.597,
-#   "social_score": 0.62,
-#   "psych_score": 0.57,
-#   "behavioral_score": 0.6,
+#   "merchant_id": "9800000000",
+#   "final_score": 614,
+#   "social_score": 620,
+#   "psych_score": 620,
+#   "behavioral_score": 600,
 #   "status": "stub"
 # }
 

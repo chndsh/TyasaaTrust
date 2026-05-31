@@ -1,21 +1,17 @@
-try:
-    from fastapi import APIRouter
-except Exception:  # pragma: no cover - optional dependency
-    from .._stubs import APIRouter
-
-try:
-    from pydantic import BaseModel, ConfigDict, Field
-except Exception:  # pragma: no cover - optional dependency
-    from .._stubs import BaseModel, Field, ConfigDict
 from datetime import date
 from typing import Any
 
+from fastapi import APIRouter, HTTPException, Path
+from pydantic import BaseModel, ConfigDict, Field
+
 from ..modules.behavioral import get_behavioral_score
 from ..modules.fusion import combine_scores
-from ..modules.psychometric import get_psychometric_score
+from ..modules.psychometric import get_psychometric_score, score_session
 from ..modules.social_graph import get_social_graph_score
 
 router = APIRouter()
+MERCHANT_ID_PATTERN = r"^\d{10}$"
+
 
 class ScoringPayload(BaseModel):
     session_id: str
@@ -40,12 +36,38 @@ class BehavioralScoreWriteResponse(BaseModel):
     inserted: int
 
 
+@router.post("/score")
+def score_merchant_session(payload: ScoringPayload):
+    try:
+        psych_result = score_session(payload.session_id, payload.answers)
+        merchant_id = psych_result["merchant_id"]
+
+        social_score = get_social_graph_score(merchant_id)
+        behavioral_score = get_behavioral_score(merchant_id)
+
+        return combine_scores(merchant_id, social_score, psych_result, behavioral_score)
+    except KeyError as e:
+        raise HTTPException(status_code=440, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @router.get("/{merchant_id}")
-def score_merchant(merchant_id: str):
-    social = get_social_graph_score(merchant_id)
-    psych = get_psychometric_score(merchant_id)
-    behavioral = get_behavioral_score(merchant_id)
-    return combine_scores(merchant_id, social, psych, behavioral)
+def score_merchant(
+    merchant_id: str = Path(
+        ...,
+        pattern=MERCHANT_ID_PATTERN,
+        description="10-digit numeric merchant identifier.",
+        examples=["9800000000"],
+    )
+):
+    try:
+        social_score = get_social_graph_score(merchant_id)
+        psych_score = get_psychometric_score(merchant_id)
+        behavioral_score = get_behavioral_score(merchant_id)
+        return combine_scores(merchant_id, social_score, psych_score, behavioral_score)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.post("/behavioral", status_code=201, response_model=BehavioralScoreWriteResponse)
