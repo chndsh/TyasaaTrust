@@ -1,27 +1,3 @@
-<<<<<<< HEAD
-from typing import Any
-import re
-
-MERCHANT_ID_PATTERN = re.compile(r"^\d{10}$")
-
-
-def _validate_merchant_id(merchant_id: str) -> None:
-    if not MERCHANT_ID_PATTERN.match(merchant_id):
-        raise ValueError("merchant_id must be a 10-digit numeric string.")
-
-
-def get_social_graph_score(merchant_id: str) -> dict[str, Any]:
-    _validate_merchant_id(merchant_id)
-    return {
-        "merchant_id": merchant_id,
-        "social_score": 620,
-        "signals": {
-            "connections": 18,
-            "community_score": 700,
-        },
-        "status": "stub",
-    }
-=======
 # backend/modules/social_graph.py
 # TyasaaTrust - Social Graph Engine
 #
@@ -380,7 +356,7 @@ def get_social_graph_score(
     the intended behaviour for a brand-new unbanked merchant.
     """
     if transactions is None:
-        from data.mock_generator import generate_transactions
+        from backend.data.mock_generator import generate_transactions
         transactions = generate_transactions()
     txns = transactions
     analysis = analyze_social_graph(txns)
@@ -411,7 +387,7 @@ if __name__ == "__main__":
     import os
 
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-    from data.mock_generator import generate_transactions, MERCHANTS
+    from backend.data.mock_generator import generate_transactions, MERCHANTS
 
     txns = generate_transactions()
     print(f"Loaded {len(txns)} transactions covering {len(MERCHANTS)} merchants\n")
@@ -447,4 +423,3 @@ if __name__ == "__main__":
         print(
             f"{mid:<16} {name:<22} {s['social_score']:>6}  {fraud:>5}  {repeat:>6}  {s['status']}"
         )
->>>>>>> fb57974 (Add social graph fraud-ring engine and transaction seed data)
