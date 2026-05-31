@@ -20,13 +20,18 @@ def get_behavioral_score(merchant_id: str) -> dict[str, Any]:
 
     review_sentiment = 620 + (len(events) % 100)
     chargeback_rate = max(0, 40 - (len(events) // 10))
+    on_time_score = min(review_sentiment * 0.6, 400)
+    consistency_score = min((100 - chargeback_rate) * 4, 300)
+    behavioral_score = int(on_time_score + consistency_score)
 
     return {
         "merchant_id": merchant_id,
-        "behavioral_score": 600,
+        "behavioral_score": behavioral_score,
         "signals": {
             "review_sentiment": review_sentiment,
             "chargeback_rate": chargeback_rate,
+            "on_time_score": on_time_score,
+            "consistency_score": consistency_score,
         },
         "event_count": footprint["event_count"],
         "status": "scored",
