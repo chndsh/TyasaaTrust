@@ -1,3 +1,4 @@
 .env
 TyasaaTrust
 venv
+backend/modules/__pycache__
