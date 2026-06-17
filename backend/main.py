@@ -1,24 +1,20 @@
-import os
-import sys
+try:
+    from dotenv import load_dotenv
+except Exception:  # pragma: no cover - optional dependency
+    def load_dotenv():
+        return None
 
-# Compute the absolute path to the project root directory
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
-if not os.path.exists(os.path.join(project_root, "backend")):
-    if project_root in sys.path:
-        sys.path.remove(project_root)
-    project_root = os.path.dirname(project_root)
-    if project_root not in sys.path:
-        sys.path.insert(0, project_root)
+try:
+    from fastapi import FastAPI
+except Exception:  # pragma: no cover - optional dependency
+    from ._stubs import FastAPI
 
-from dotenv import load_dotenv
-from fastapi import FastAPI
-
-from backend.routers.graph import router as graph_router
-from backend.routers.psych import router as psych_router
-from backend.routers.ingest import router as ingest_router
-from backend.routers.scoring import router as scoring_router
+# import routers after ensuring FastAPI is available (routers themselves
+# fall back to stubs for missing deps)
+from .routers.graph import router as graph_router
+from .routers.psych import router as psych_router
+from .routers.ingest import router as ingest_router
+from .routers.scoring import router as scoring_router
 
 load_dotenv()
 

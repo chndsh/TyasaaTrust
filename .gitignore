@@ -1,4 +1,46 @@
+# Environment and local tooling
 .env
+.venv/
+venv/
+env/
+ENV/
+.python-version
+
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+
+# Build and packaging outputs
+build/
+dist/
+site/
+*.egg-info/
+
+# Project-generated artifacts
+/models/
+data/staged/
+
+# Editor and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs and temp files
+*.log
+*.tmp
+*.temp
+*.swp
+
 TyasaaTrust
 venv
 backend/modules/__pycache__
@@ -6,12 +48,6 @@ backend/modules/__pycache__
 __pycache__/
 *.py[cod]
 *$py.class
-
-# Environments
-.venv/
-venv/
-ENV/
-.env
 
 # Streamlit local runtime metadata
 .streamlit/config.toml

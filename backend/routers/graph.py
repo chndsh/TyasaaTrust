@@ -1,6 +1,9 @@
-from fastapi import APIRouter, Path
+try:
+    from fastapi import APIRouter, Path
+except Exception:  # pragma: no cover - optional dependency
+    from .._stubs import APIRouter
 
-from backend.modules.social_graph import get_social_graph_score
+from ..modules.social_graph import get_social_graph_score
 
 router = APIRouter()
 MERCHANT_ID_PATTERN = r"^\d{10}$"

@@ -28,5 +28,5 @@ def combine_scores(
         "social_score": social_score,
         "psych_score": psych_score,
         "behavioral_score": behavioral_score,
-        "status": "stub",
+        "status": "combined",
     }

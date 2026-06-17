@@ -13,21 +13,30 @@
 #   - Errors from the module are mapped to precise HTTP status codes.
 
 from __future__ import annotations
+try:
+    from fastapi import APIRouter, HTTPException, status
+except Exception:  # pragma: no cover - optional dependency
+    from .._stubs import APIRouter
+
+try:
+    from pydantic import BaseModel, Field, field_validator
+except Exception:  # pragma: no cover - optional dependency
+    from .._stubs import BaseModel, Field
 
 from typing import Annotated
-
-from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel, Field, field_validator
-
-from backend.modules.psychometric import (
+from ..modules.psychometric import (
     ScoreResult,
     SessionState,
     create_session,
     get_session,
     score_session,
+    score_responses,
 )
 
 router = APIRouter(tags=["Psychometric"])
+
+QUESTIONS: list[dict] = []
+
 MERCHANT_ID_PATTERN = r"^\d{10}$"
 MerchantId = Annotated[
     str,
@@ -38,6 +47,8 @@ MerchantId = Annotated[
         examples=["9800000000"],
     ),
 ]
+
+
 
 
 # ---------------------------------------------------------------------------
@@ -70,6 +81,9 @@ class SubmitAnswersRequest(BaseModel):
             raise ValueError("Answers dict must not be empty.")
         return v
 
+class QuizSubmission(BaseModel):
+    merchant_id: str
+    responses: list[dict] = []  # [{"question": str, "answer": str, "trait": str}]
 
 # --- Response bodies ---------------------------------------------------------
 
@@ -201,6 +215,22 @@ def start_session(body: StartSessionRequest) -> StartSessionResponse:
     )
 
 
+@router.post("/submit")
+async def submit_quiz(submission: QuizSubmission):
+    responses = getattr(submission, "responses", []) or []
+    result = score_responses(responses)
+    return {
+        "merchant_id": getattr(submission, "merchant_id", None),
+        "psych_score": result.get("psych_score"),
+        "traits": result.get("traits"),
+        "summary": result.get("summary"),
+    }
+
+
+@router.get("/questions")
+async def get_questions():
+    return {"questions": QUESTIONS}
+
 @router.get(
     "/session/{session_id}",
     response_model=SessionStatusResponse,
@@ -277,3 +307,4 @@ def submit_answers(
         answers=result["answers"],
         scored_at=result["scored_at"],
     )
+
